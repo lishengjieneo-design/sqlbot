@@ -1,0 +1,17 @@
+# Full local codebase overlay on official SQLBot image (Linux build on ECS)
+FROM dataease/sqlbot
+
+ENV SQLBOT_HOME=/opt/sqlbot
+ENV APP_HOME=${SQLBOT_HOME}/app
+
+COPY backend/apps ${APP_HOME}/apps
+COPY backend/common ${APP_HOME}/common
+COPY backend/alembic ${APP_HOME}/alembic
+COPY backend/alembic.ini ${APP_HOME}/alembic.ini
+COPY backend/main.py ${APP_HOME}/main.py
+COPY backend/locales ${APP_HOME}/locales
+COPY backend/templates ${APP_HOME}/templates
+
+COPY frontend/dist ${SQLBOT_HOME}/frontend/dist
+
+RUN find ${APP_HOME} ${SQLBOT_HOME}/frontend/dist -name '._*' -delete 2>/dev/null || true

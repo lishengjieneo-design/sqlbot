@@ -1,0 +1,35 @@
+services:
+  sqlbot:
+    image: sqlbot-local:ecs
+    container_name: sqlbot_dev
+    restart: always
+    privileged: true
+    networks:
+      - sqlbot-network
+    ports:
+      - 8000:8000
+      - 8001:8001
+    environment:
+      POSTGRES_SERVER: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: sqlbot
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: Password123@pg
+      PROJECT_NAME: "SQLBot"
+      DEFAULT_PWD: "SQLBot@123456"
+      SERVER_IMAGE_HOST: http://47.83.2.158:8001/images/
+      SECRET_KEY: y5txe1mRmS_JpOrUzFzHEu-kIQn3lf7ll0AOv9DQh0s
+      BACKEND_CORS_ORIGINS: "http://47.83.2.158:8000,http://localhost,http://localhost:5173,https://localhost,https://localhost:5173"
+      LOG_LEVEL: "INFO"
+      SQL_DEBUG: "False"
+      EMBEDDING_ENABLED: "false"
+      TABLE_EMBEDDING_ENABLED: "false"
+    volumes:
+      - ./data/sqlbot/excel:/opt/sqlbot/data/excel
+      - ./data/sqlbot/file:/opt/sqlbot/data/file
+      - ./data/sqlbot/images:/opt/sqlbot/images
+      - ./data/sqlbot/logs:/opt/sqlbot/app/logs
+      - ./data/postgresql:/var/lib/postgresql/data
+
+networks:
+  sqlbot-network:
