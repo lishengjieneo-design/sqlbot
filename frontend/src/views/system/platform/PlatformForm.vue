@@ -24,22 +24,85 @@ const busiMapping = {
   8: 'lark',
   9: 'larksuite',
 } as any
-const initForm = (row: any) => {
-  state.settingList.forEach((item: any) => {
-    const key = item.realKey
-    rule[key] = [
+
+const buildFieldRules = (item: { realKey: string; type: string }) => {
+  const required = {
+    required: true,
+    message: t('common.require'),
+    trigger: 'blur',
+  }
+  const key = item.realKey
+  if (key === 'auto_create_user') {
+    return [
+      required,
       {
-        required: true,
-        message: t('common.require'),
-        trigger: 'blur',
-      },
-      {
-        min: 5,
-        max: 255,
-        message: t('common.input_limit', [5, 255]),
+        validator: (_rule: unknown, value: unknown, callback: (err?: Error) => void) => {
+          const v = String(value ?? '')
+            .trim()
+            .toLowerCase()
+          if (['true', 'false', '1', '0', 'yes', 'no'].includes(v)) {
+            callback()
+            return
+          }
+          callback(new Error('true / false'))
+        },
         trigger: 'blur',
       },
     ]
+  }
+  if (key === 'default_oid') {
+    return [
+      required,
+      {
+        validator: (_rule: unknown, value: unknown, callback: (err?: Error) => void) => {
+          const v = String(value ?? '').trim()
+          if (/^\d+$/.test(v) && Number(v) > 0) {
+            callback()
+            return
+          }
+          callback(new Error(t('common.require')))
+        },
+        trigger: 'blur',
+      },
+    ]
+  }
+  if (key === 'redirect_uri') {
+    return [
+      required,
+      {
+        min: 5,
+        max: 512,
+        message: t('common.input_limit', [5, 512]),
+        trigger: 'blur',
+      },
+    ]
+  }
+  if (item.type === 'pwd') {
+    return [
+      required,
+      {
+        min: 1,
+        max: 255,
+        message: t('common.input_limit', [1, 255]),
+        trigger: 'blur',
+      },
+    ]
+  }
+  return [
+    required,
+    {
+      min: 5,
+      max: 255,
+      message: t('common.input_limit', [5, 255]),
+      trigger: 'blur',
+    },
+  ]
+}
+
+const initForm = (row: any) => {
+  state.settingList.forEach((item: any) => {
+    const key = item.realKey
+    rule[key] = buildFieldRules(item)
     state.form[key] = row[key]
   })
 }
