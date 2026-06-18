@@ -253,17 +253,12 @@ export const useAppearanceStore = defineStore('appearanceStore', {
       // if (!isDataEaseBi) {
       //   document.title = ''
       // }
-      const obj = LicenseGenerator.getLicense()
-      if (obj?.status !== 'valid') {
-        setCurrentColor('#1CBA90')
-        document.title = 'SQLBot'
-        setLinkIcon()
-        return
-      }
+      // OSS: always load saved appearance from API (no valid xpack license on test env).
       const resData = await request.get('/system/appearance/ui')
       this.loaded = true
       if (!resData?.length) {
         setCurrentColor('#1CBA90')
+        document.title = 'SQLBot'
         setLinkIcon()
         return
       }
