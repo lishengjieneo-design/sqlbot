@@ -66,6 +66,7 @@
 ## 5. 常见问题
 
 - **重定向不匹配**：开放平台登记的 URL 必须与浏览器地址栏及 `Redirect URI` 配置一致。
+- **小程序 / 客户端内报错 `20029 invalid redirect uri`**：Lark 客户端内 `requestAuthCode` 获取的 code **不能**带 `redirect_uri` 换 token；需使用 `/authen/v1/access_token`（SQLBot 已按 `state=fit2cloud-larksuite-client` 自动区分）。扫码登录仍走 OIDC 并需匹配 `Redirect URI`。
 - **账号不存在**：`Auto Create User=false` 时需先在 SQLBot 存在对应 `sys_user_platform` 绑定。
 - **无工作空间**：自动创建用户须配置有效的 `Default Workspace ID`。
 - **生产环境**：需 HTTPS 公网域名；Linux 部署使用 Linux 版 Python 依赖，勿使用 macOS 编译的 xpack `.so`。

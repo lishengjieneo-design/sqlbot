@@ -310,8 +310,8 @@ const third_party_authentication = (state?: string) => {
   const urlParams = getUrlParams()
   const urlFlag = findKey && findKey > 5 ? 'platform' : 'authentication'
   const ssoUrl = `/system/${urlFlag}/sso/${findKey}`
-  if (!urlParams?.redirect_uri) {
-    urlParams['redirect_uri'] = encodeURIComponent(getSQLBotAddr())
+  if (!urlParams?.redirect_uri && !(originName === 'larksuite' && state?.includes('client'))) {
+    urlParams['redirect_uri'] = getSQLBotAddr()
   }
   request
     .post(ssoUrl, urlParams)

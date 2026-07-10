@@ -9,9 +9,9 @@
           </el-icon>
         </div>
         <div class="tab-card active">
-          <div :title="pageName || 'SQLBot'" class="active-span">
+          <div :title="displayName" class="active-span">
             <img :src="pageWeb" alt="" />
-            <span>{{ pageName || 'SQLBot' }}</span>
+            <span>{{ displayName }}</span>
           </div>
           <el-icon size="10">
             <icon_close_outlined />
@@ -47,7 +47,7 @@
                 ></el-icon>
                 <span
                   style="margin-left: 14px; font-size: 34px; font-weight: 900; color: #485559"
-                  >{{ name }}</span
+                  >{{ displayName }}</span
                 >
               </div>
             </div>
@@ -110,6 +110,7 @@ import loginImage from '@/assets/blue/login-image_blue.png'
 import { propTypes } from '@/utils/propTypes'
 import { sanitizeHtml } from '@/utils/xss'
 import { isBtnShow } from '@/utils/utils'
+import { resolveSiteName } from '@/utils/brand'
 import { useI18n } from 'vue-i18n'
 import { computed, ref, onMounted, nextTick } from 'vue'
 import elementResizeDetectorMaker from 'element-resize-detector'
@@ -155,6 +156,7 @@ const pageBg = computed(() =>
       : baseUrl + props.bg
 )
 const pageName = computed(() => props.name)
+const displayName = computed(() => resolveSiteName(pageName.value))
 const pageSlogan = computed(() => props.slogan)
 const showFoot = computed(() => props.foot && props.foot === 'true')
 const pageFootContent = computed(() => {

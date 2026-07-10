@@ -12,6 +12,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAppearanceStoreWithOut } from '@/stores/appearance'
 import { useEmitt } from '@/utils/useEmitt'
 import { isMobile } from '@/utils/utils'
+import { resolveSiteName } from '@/utils/brand'
 import { onBeforeMount } from 'vue'
 
 const isPhone = computed(() => {
@@ -21,6 +22,7 @@ const router = useRouter()
 const collapse = ref(false)
 const collapseCopy = ref(false)
 const appearanceStore = useAppearanceStoreWithOut()
+const siteName = computed(() => resolveSiteName(appearanceStore.name))
 let time: any
 onUnmounted(() => {
   clearTimeout(time)
@@ -114,8 +116,8 @@ onBeforeMount(() => {
               class="collapse-icon"
               @click="toChatIndex"
             />
-            <span style="max-width: 150px" :title="appearanceStore.name" class="ellipsis">{{
-              appearanceStore.name
+            <span style="max-width: 150px" :title="siteName" class="ellipsis">{{
+              siteName
             }}</span>
           </div>
           <custom_small
@@ -126,8 +128,8 @@ onBeforeMount(() => {
 
           <div v-else class="default-sqlbot">
             <custom_small class="collapse-icon"></custom_small>
-            <span style="max-width: 150px" :title="appearanceStore.name" class="ellipsis">{{
-              appearanceStore.name
+            <span style="max-width: 150px" :title="siteName" class="ellipsis">{{
+              siteName
             }}</span>
           </div>
         </template>
@@ -150,8 +152,8 @@ onBeforeMount(() => {
               class="collapse-icon"
               @click="toChatIndex"
             />
-            <span style="max-width: 150px" :title="appearanceStore.name" class="ellipsis">{{
-              appearanceStore.name
+            <span style="max-width: 150px" :title="siteName" class="ellipsis">{{
+              siteName
             }}</span>
           </div>
           <custom_small
@@ -161,8 +163,8 @@ onBeforeMount(() => {
           ></custom_small>
           <div v-else class="default-sqlbot">
             <custom_small class="collapse-icon"></custom_small>
-            <span style="max-width: 150px" :title="appearanceStore.name" class="ellipsis">{{
-              appearanceStore.name
+            <span style="max-width: 150px" :title="siteName" class="ellipsis">{{
+              siteName
             }}</span>
           </div>
         </template>
@@ -185,8 +187,8 @@ onBeforeMount(() => {
               class="collapse-icon"
               @click="toChatIndex"
             />
-            <span style="max-width: 150px" :title="appearanceStore.name" class="ellipsis">{{
-              appearanceStore.name
+            <span style="max-width: 150px" :title="siteName" class="ellipsis">{{
+              siteName
             }}</span>
           </div>
           <LOGO_fold
@@ -196,8 +198,8 @@ onBeforeMount(() => {
           ></LOGO_fold>
           <div v-else class="default-sqlbot">
             <LOGO_fold class="collapse-icon" @click="toChatIndex"></LOGO_fold>
-            <span style="max-width: 150px" :title="appearanceStore.name" class="ellipsis">{{
-              appearanceStore.name
+            <span style="max-width: 150px" :title="siteName" class="ellipsis">{{
+              siteName
             }}</span>
           </div>
         </template>

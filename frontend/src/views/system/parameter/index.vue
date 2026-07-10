@@ -1,11 +1,26 @@
 <script lang="ts" setup>
-import { onMounted, provide, reactive, unref } from 'vue'
+import { onMounted, provide, reactive, unref, computed, ref } from 'vue'
 import icon_info_outlined_1 from '@/assets/svg/icon_info_outlined_1.svg'
 import { useI18n } from 'vue-i18n'
 import PlatformParam from './xpack/PlatformParam.vue'
 import { request } from '@/utils/request'
 import { formatArg } from '@/utils/utils'
+import { datasourceApi } from '@/api/datasource'
+import { useUserStore } from '@/stores/user'
+import { useChatConfigStore } from '@/stores/chatConfig'
 const { t } = useI18n()
+const userStore = useUserStore()
+
+const datasourceOptions = ref<Array<{ id: number; name: string; type: string }>>([])
+const defaultDsKey = computed(() => `chat.default_datasource.${userStore.getOid || 1}`)
+const defaultDatasourceId = computed({
+  get() {
+    return state.parameterForm[defaultDsKey.value]
+  },
+  set(val: number | undefined) {
+    state.parameterForm[defaultDsKey.value] = val
+  },
+})
 
 const state = reactive({
   parameterForm: reactive<any>({
@@ -15,6 +30,9 @@ const state = reactive({
 })
 provide('parameterForm', state.parameterForm)
 const loadData = () => {
+  datasourceApi.list().then((res: any) => {
+    datasourceOptions.value = res || []
+  })
   request.get('/system/parameter').then((res: any) => {
     if (res) {
       res.forEach((item: any) => {
@@ -31,6 +49,11 @@ const loadData = () => {
         state.parameterForm['chat.context_record_count'] === null
       ) {
         state.parameterForm['chat.context_record_count'] = 10
+      }
+      const dsKey = defaultDsKey.value
+      if (state.parameterForm[dsKey] !== undefined && state.parameterForm[dsKey] !== null) {
+        const parsed = Number(state.parameterForm[dsKey])
+        state.parameterForm[dsKey] = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
       }
     }
   })
@@ -61,12 +84,14 @@ const beforeChange = (): Promise<boolean> => {
   })
 }
 const buildParam = () => {
-  const changedItemArray = Object.keys(state.parameterForm).map((key: string) => {
+  const dsKey = defaultDsKey.value
+  const form = { ...state.parameterForm }
+  const dsVal = form[dsKey]
+  form[dsKey] = dsVal != null && dsVal !== '' ? String(dsVal) : ''
+  const changedItemArray = Object.keys(form).map((key: string) => {
     return {
       pkey: key,
-      pval: Object.prototype.hasOwnProperty.call(state.parameterForm, 'key')
-        ? state.parameterForm[key].toString()
-        : state.parameterForm[key],
+      pval: form[key]?.toString?.() ?? form[key],
     }
   })
   const formData = new FormData()
@@ -83,6 +108,7 @@ const saveHandler = () => {
     })
     .then(() => {
       ElMessage.success(t('common.save_success'))
+      useChatConfigStore().fetchGlobalConfig()
     })
 }
 onMounted(() => {
@@ -157,6 +183,38 @@ onMounted(() => {
                 step="1"
                 @change="onContextRecordCountChange"
               />
+            </div>
+          </div>
+        </el-row>
+        <el-row>
+          <div class="card-item">
+            <div class="label">
+              {{ t('parameter.default_datasource') }}
+              <el-tooltip
+                effect="dark"
+                :content="t('parameter.default_datasource_hint')"
+                placement="top"
+              >
+                <el-icon size="16">
+                  <icon_info_outlined_1></icon_info_outlined_1>
+                </el-icon>
+              </el-tooltip>
+            </div>
+            <div class="value">
+              <el-select
+                v-model="defaultDatasourceId"
+                clearable
+                filterable
+                style="width: 100%; max-width: 420px"
+                :placeholder="t('parameter.default_datasource_placeholder')"
+              >
+                <el-option
+                  v-for="item in datasourceOptions"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
             </div>
           </div>
         </el-row>

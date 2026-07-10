@@ -76,7 +76,7 @@
                   <div class="tips-page">
                     {{
                       t('system.screen_customization_supported', {
-                        msg: loginForm.name || 'SQLBot',
+                        msg: loginForm.name || t('brand.site_name'),
                       })
                     }}
                   </div>
@@ -166,7 +166,7 @@
                         <img v-if="pageLogin" height="30" width="30" :src="pageLogin" alt="" />
                         <custom_small v-else-if="themeColor !== 'default'" class="logo" />
                         <logo v-else></logo>
-                        <span style="margin-left: 8px">{{ loginForm.name }}</span>
+                        <span style="margin-left: 8px">{{ previewSiteName }}</span>
                       </div>
                       <div class="bottom-sql">
                         <Person
@@ -186,7 +186,7 @@
                           ><custom_small v-if="themeColor !== 'default'"></custom_small>
                           <LOGO_fold v-else></LOGO_fold
                         ></el-icon>
-                        {{ topForm.pc_welcome }}
+                        {{ previewWelcome }}
                       </div>
                       <div class="sub">
                         {{ topForm.pc_welcome_desc }}
@@ -204,7 +204,7 @@
                   <div class="tips-page">
                     {{
                       t('system.screen_customization_settings', {
-                        msg: loginForm.name || 'SQLBot',
+                        msg: loginForm.name || t('brand.site_name'),
                       })
                     }}
                   </div>
@@ -298,6 +298,7 @@ import { useAppearanceStoreWithOut } from '@/stores/appearance'
 import LoginPreview from './LoginPreview.vue'
 import Person from './Person.vue'
 import { setCurrentColor } from '@/utils/utils'
+import { resolveSiteName, formatPcWelcome } from '@/utils/brand'
 
 // import TinymceEditor from '@/components/rich-text/TinymceEditor.vue'
 import { cloneDeep } from 'lodash-es'
@@ -346,7 +347,7 @@ const changedItemArray = ref<ConfigItem[]>([])
 
 const loginFormRef = ref<FormInstance>()
 const defaultLoginForm = reactive<LoginForm>({
-  name: 'SQLBot',
+  name: t('brand.site_name'),
   slogan: t('common.intelligent_questioning_platform'),
   foot: 'false',
   showSlogan: '0',
@@ -377,7 +378,7 @@ const defaultTopForm = {
   help: 'https://dataease.cn/sqlbot/v1/',
   showDoc: '0',
   showAbout: '0',
-  pc_welcome: '你好，我是 SQLBot ',
+  pc_welcome: t('brand.pc_welcome_default'),
   pc_welcome_desc: `我可以查询数据、生成图表、检测数据异常、预测数据等赶快开启智能问数吧～`,
 }
 
@@ -392,6 +393,8 @@ const topForm = reactive<{
 const isBlue = computed(() => {
   return themeColor.value === 'blue'
 })
+const previewSiteName = computed(() => resolveSiteName(loginForm.name))
+const previewWelcome = computed(() => formatPcWelcome(topForm.pc_welcome, ''))
 const configList = [
   {
     logo: t('system.website_logo'),

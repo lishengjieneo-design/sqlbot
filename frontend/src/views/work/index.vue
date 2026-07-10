@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import DatasourceCard from './DatasourceCard.vue'
 interface Datasource {
   id?: string
@@ -23,15 +24,15 @@ const datasourceListComputed = computed(() =>
   )
 )
 
+const { t } = useI18n()
 const dialogVisible = ref(false)
 </script>
 
 <template>
   <div class="chat-init_tip">
-    <div class="hello-sqlbot">Hello, I'm SQLBot, happy to serve you!</div>
+    <div class="hello-sqlbot">{{ t('common.greeting') }}</div>
     <div class="function-sqlbot">
-      I can help you query data, generate charts, detect data anomalies, predict data, etc. Please
-      select a data source and start intelligent data query~
+      {{ t('embedded.data_analysis_now') }}
     </div>
     <div class="select-datasource">
       <span class="title">Select data source</span>

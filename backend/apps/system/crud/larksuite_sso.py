@@ -24,6 +24,11 @@ def validate_larksuite_state(state: Optional[str]) -> None:
         raise ValueError("invalid larksuite oauth state")
 
 
+def is_larksuite_in_app_state(state: Optional[str]) -> bool:
+    """True for Lark client / mini-program web-view (requestAuthCode) login."""
+    return bool(state and f"{STATE_PREFIX}client" in state)
+
+
 def get_larksuite_config(session: Session) -> tuple[AuthenticationModel, LarksuiteConfig]:
     model = get_by_type(session, LARKSUITE_TYPE)
     if not model or not model.config:

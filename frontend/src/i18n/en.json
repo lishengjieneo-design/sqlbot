@@ -7,6 +7,11 @@
     "AI Model Configuration": "AI Model Config",
     "Details": "Details"
   },
+  "brand": {
+    "site_name": "GTC SightMind AI",
+    "assistant_name": "SightMind AI",
+    "pc_welcome_default": "Hello, {name}, I am SightMind AI"
+  },
   "variables": {
     "please_select_date": "Please select a date",
     "number_variable_error": "Please enter the correct numerical range.",
@@ -75,7 +80,10 @@
     "closed_by_default": "In the Question Count window, control whether the model thinking process is expanded or closed by default.",
     "and_platform_integration": "Authentication-related",
     "login_settings": "Login Settings",
-    "default_login": "Default Login Method"
+    "default_login": "Default Login Method",
+    "default_datasource": "Default Data Source",
+    "default_datasource_hint": "This data source is used automatically when starting Q&A. Leave empty to require manual selection.",
+    "default_datasource_placeholder": "Select a default data source"
   },
   "prompt": {
     "default_password": "Default password:{msg}",
@@ -164,7 +172,7 @@
     "the_default_model": "Already the default model",
     "as_default_model": "Set as Default Model",
     "no_model_yet": "No model yet",
-    "intelligent_questioning_platform": "Welcome to the SQLBot Intelligent Questioning Platform",
+    "intelligent_questioning_platform": "Welcome to GTC SightMind AI",
     "login": "Login",
     "login_": "Login",
     "confirm2": "Confirm",
@@ -284,6 +292,7 @@
     "quick_question": "quick question",
     "new_chat": "New Chat",
     "start_sqlbot": "New Chat",
+    "pc_welcome_default": "Hello, {name}, I am SightMind AI",
     "title": "Data Q&A",
     "placeholder": "Please enter your question",
     "ask": "Ask",
@@ -324,7 +333,7 @@
     "clarification_new_question_hint": "Clarification dismissed. Please ask a new question.",
     "clarification_resume_failed": "Could not resume. Please refresh and try again.",
     "recent_questions": "Recent questions",
-    "greeting": "Hello, I'm SQLBot. How can I assist you today?",
+    "greeting": "Hello, I'm SightMind AI. How can I assist you today?",
     "hint_description": "You can query data, generate charts, analyze data, predict trends, and more. Please select a data source to start your smart data exploration~",
     "select_datasource": "Select Data Source",
     "view_more": "View More",
@@ -681,7 +690,7 @@
     "new_conversation": "New Conversation",
     "send": "Send",
     "stop_replying": "Stop replying",
-    "i_am_sqlbot": "Hello, I am SQLBot",
+    "i_am_sqlbot": "Hello, I am SightMind AI",
     "predict_data_etc": "I can query data, generate charts, detect data anomalies, predict data, etc.",
     "intelligent_data_query": "Hurry up and start intelligent data query~"
   },
@@ -747,12 +756,12 @@
     "repeating_parameters": "Duplicate Parameter",
     "interface_credentials": "Interface credentials",
     "no_credentials_yet": "No credentials yet",
-    "intelligent_customer_service": "SQLBot Intelligent Customer Service",
+    "intelligent_customer_service": "GTC SightMind AI Assistant",
     "enter_a_question": "Please enter a question",
     "new_conversation": "New Conversation",
     "send": "Send",
     "stop_replying": "Stop replying",
-    "i_am_sqlbot": "Hello, I am SQLBot",
+    "i_am_sqlbot": "Hello, I am SightMind AI",
     "predict_data_etc": "I can query data, generate charts, detect data anomalies, predict data, etc.",
     "intelligent_data_query": "Hurry up and start intelligent data query~",
     "origin_format_error": "Format invalid, starts with http or https and cannot end with /",
@@ -883,8 +892,8 @@
     "on_webpage_tabs": "Platform name displayed on webpage tabs",
     "welcome_message": "Display a welcome message",
     "the_product_logo": "Welcome Message below the product logo",
-    "screen_customization_supported": "Defaults to the SQLBot login screen; customization supported",
-    "screen_customization_settings": "The default is the SQLBot platform interface, which supports custom settings",
+    "screen_customization_supported": "Defaults to the GTC SightMind AI login screen; customization supported",
+    "screen_customization_settings": "The default is the GTC SightMind AI platform interface, which supports custom settings",
     "platform_settings": "Platform Settings",
     "help_documentation": "Help Documentation",
     "show_about": "Show About",
@@ -916,7 +925,7 @@
     "client_secret": "Client Secret",
     "redirect_url": "Redirect URL",
     "logout_redirect_url": "Logout Redirect URL",
-    "logout_redirect_url_placeholder": "By default, users will be redirected to the SQLBot login page after logout. You can customize the redirect address here.",
+    "logout_redirect_url_placeholder": "By default, users will be redirected to the GTC SightMind AI login page after logout. You can customize the redirect address here.",
     "oauth2_settings": "OAuth2 Settings",
     "scope": "Scope",
     "userinfo_url": "User Info URL",
@@ -996,7 +1005,7 @@
     "opt_time": "Operation Time"
   },
   "api_key": {
-    "info_tips": "The API Key is your credential for accessing the SQLBot API, with full permissions for your account. Please keep it secure! Do not disclose the API Key in any public channels to avoid security risks from unauthorized use.",
+    "info_tips": "The API Key is your credential for accessing the GTC SightMind AI API, with full permissions for your account. Please keep it secure! Do not disclose the API Key in any public channels to avoid security risks from unauthorized use.",
     "create": "Create",
     "to_doc": "View API",
     "trigger_limit": "Supports up to {0} API Keys"

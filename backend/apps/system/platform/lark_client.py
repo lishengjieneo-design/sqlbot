@@ -40,7 +40,9 @@ class LarkClient:
             payload = resp.json()
             if payload.get("code") != 0:
                 raise RuntimeError(payload.get("msg") or f"feishu api error: {payload}")
-            token = (payload.get("data") or {}).get("app_access_token")
+            token = payload.get("app_access_token") or payload.get("tenant_access_token")
+            if not token:
+                token = (payload.get("data") or {}).get("app_access_token")
             if not token:
                 raise RuntimeError("missing app_access_token in feishu response")
             return True

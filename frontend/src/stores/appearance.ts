@@ -4,6 +4,7 @@ import { store } from '@/stores/index'
 import { request } from '@/utils/request'
 
 import { setTitle, setCurrentColor } from '@/utils/utils'
+import { resolveSiteName } from '@/utils/brand'
 
 const basePath = import.meta.env.VITE_API_BASE_URL
 const baseUrl = basePath + '/system/appearance/picture/'
@@ -258,7 +259,9 @@ export const useAppearanceStore = defineStore('appearanceStore', {
       this.loaded = true
       if (!resData?.length) {
         setCurrentColor('#1CBA90')
-        document.title = 'SQLBot'
+        const defaultTitle = resolveSiteName()
+        document.title = defaultTitle
+        setTitle(defaultTitle)
         setLinkIcon()
         return
       }
@@ -293,11 +296,13 @@ export const useAppearanceStore = defineStore('appearanceStore', {
       this.web = data.web
       this.name = data.name
       if (this.name) {
-        document.title = this.name
-        setTitle(this.name)
+        const title = resolveSiteName(this.name)
+        document.title = title
+        setTitle(title)
       } else {
-        document.title = 'SQLBot'
-        setTitle('SQLBot')
+        const defaultTitle = resolveSiteName()
+        document.title = defaultTitle
+        setTitle(defaultTitle)
       }
       setLinkIcon(this.web)
     },

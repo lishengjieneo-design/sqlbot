@@ -4,7 +4,7 @@
       class="main-menu"
       :class="{ 'main-menu-sidebar': !topLayout, 'main-menu-topbar': topLayout }"
     >
-      <div class="logo">SQLBot</div>
+      <div class="logo">{{ siteName }}</div>
 
       <!-- <div v-if="!topLayout || !showSubmenu"
            :class="{ 'workspace-area': !topLayout, 'topbar-workspace-area': topLayout }">
@@ -174,9 +174,13 @@ import { useCache } from '@/utils/useCache'
 import { useI18n } from 'vue-i18n'
 import LanguageSelector from '@/components/Language-selector/index.vue'
 import AboutDialog from '@/components/about/index.vue'
+import { resolveSiteName } from '@/utils/brand'
+import { useAppearanceStoreWithOut } from '@/stores/appearance'
 
 const aboutRef = ref()
 const { t } = useI18n()
+const appearanceStore = useAppearanceStoreWithOut()
+const siteName = computed(() => resolveSiteName(appearanceStore.name))
 const { wsCache } = useCache()
 const topLayout = ref(false)
 const router = useRouter()

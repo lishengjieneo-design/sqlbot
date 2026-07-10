@@ -154,7 +154,7 @@ async function doCreateNewChat() {
   if (!isCompletePage.value && !selectAssistantDs.value) {
     return
   }
-  chatCreatorRef.value?.showDs()
+  chatCreatorRef.value?.showDsOrDefault()
 }
 
 function onClickHistory(chat: Chat) {

@@ -7,6 +7,11 @@
     "AI Model Configuration": "模型配置",
     "Details": "詳情"
   },
+  "brand": {
+    "site_name": "GTC 智能問數",
+    "assistant_name": "問數助手",
+    "pc_welcome_default": "你好，{name}，我是問數助手"
+  },
   "variables": {
     "please_select_date": "請選擇日期",
     "number_variable_error": "請輸入正確的數值範圍",
@@ -75,7 +80,10 @@
     "closed_by_default": "在問數視窗中，控制模型思考過程預設展開或者關閉",
     "and_platform_integration": "登入認證相關",
     "login_settings": "登入設定",
-    "default_login": "預設登入方式"
+    "default_login": "預設登入方式",
+    "default_datasource": "預設資料來源",
+    "default_datasource_hint": "開啟問數時將自動使用該資料來源；留空則仍需使用者手動選擇",
+    "default_datasource_placeholder": "請選擇預設資料來源"
   },
   "prompt": {
     "default_password": "預設密碼：{msg}",
@@ -164,7 +172,8 @@
     "the_default_model": "已是預設模型",
     "as_default_model": "設為預設模型",
     "no_model_yet": "暫無模型",
-    "intelligent_questioning_platform": "歡迎使用 SQLBot 智慧問數平台",
+    "intelligent_questioning_platform": "歡迎使用 GTC 智能問數",
+    "pc_welcome_default": "你好，{name}，我是問數助手",
     "login": "帳號登入",
     "login_": "登入",
     "confirm2": "確定",
@@ -284,6 +293,7 @@
     "quick_question": "快捷提問",
     "new_chat": "新建對話",
     "start_sqlbot": "開啟問數",
+    "pc_welcome_default": "你好，{name}，我是問數助手",
     "title": "智慧問數",
     "placeholder": "請輸入您的問題",
     "ask": "提問",
@@ -323,7 +333,7 @@
     "clarification_new_question": "重新提問",
     "clarification_new_question_hint": "已放棄當前澄清，請重新提問後發送",
     "clarification_resume_failed": "無法繼續產生，請重新整理頁面後重試",
-    "greeting": "你好，我是SQLBot，很高興為你服務",
+    "greeting": "你好，我是問數助手，很高興為你服務",
     "hint_description": "我可以查詢資料、產生圖表、分析資料、預測資料等，請選擇一個資料來源，開啟智慧問數吧～",
     "select_datasource": "選擇資料來源",
     "view_more": "查看更多",
@@ -680,7 +690,7 @@
     "new_conversation": "新對話",
     "send": "傳送",
     "stop_replying": "停止回覆",
-    "i_am_sqlbot": "你好，我是SQLBot",
+    "i_am_sqlbot": "你好，我是問數助手",
     "predict_data_etc": "我可以查詢資料、產生圖表、分析資料、預測資料等。",
     "intelligent_data_query": "趕快開啟智慧問數吧～"
   },
@@ -746,12 +756,12 @@
     "repeating_parameters": "重複參數",
     "interface_credentials": "介面憑證",
     "no_credentials_yet": "暫無憑證",
-    "intelligent_customer_service": "SQLBot 智慧客服",
+    "intelligent_customer_service": "GTC 智能問數客服",
     "enter_a_question": "請輸入問題",
     "new_conversation": "新建對話",
     "send": "傳送",
     "stop_replying": "停止回答",
-    "i_am_sqlbot": "你好，我是 SQLBot",
+    "i_am_sqlbot": "你好，我是問數助手",
     "predict_data_etc": "我可以查詢資料、產生圖表、檢測資料異常、預測資料等",
     "intelligent_data_query": "趕快開啟智慧問數吧～",
     "origin_format_error": "格式錯誤，http或https開頭，不能以 / 結尾",
@@ -882,8 +892,8 @@
     "on_webpage_tabs": "顯示在網頁 Tab 的平台名稱",
     "welcome_message": "顯示歡迎語",
     "the_product_logo": "產品 Logo 下的 歡迎語",
-    "screen_customization_supported": "預設為 SQLBot 登入介面，支援自訂設定",
-    "screen_customization_settings": "預設為 SQLBot 平台介面，支援自訂設定",
+    "screen_customization_supported": "預設為 GTC 智能問數登入介面，支援自訂設定",
+    "screen_customization_settings": "預設為 GTC 智能問數平台介面，支援自訂設定",
     "platform_settings": "平台設定",
     "help_documentation": "說明文件",
     "show_about": "顯示關於",
@@ -915,7 +925,7 @@
     "client_secret": "用戶端密鑰",
     "redirect_url": "回調位址",
     "logout_redirect_url": "登出回調位址",
-    "logout_redirect_url_placeholder": "登出後預設跳轉至 SQLBot 登入頁面，可自訂設定登出後跳轉位址",
+    "logout_redirect_url_placeholder": "登出後預設跳轉至 GTC 智能問數登入頁面，可自訂設定登出後跳轉位址",
     "oauth2_settings": "OAuth2 設定",
     "scope": "授權範圍",
     "userinfo_url": "使用者資訊位址",
@@ -995,7 +1005,7 @@
     "opt_time": "操作時間"
   },
   "api_key": {
-    "info_tips": "API Key 是您存取 SQLBot API 的密鑰，具有帳戶的完全權限，請您務必妥善保管！不要以任何方式公開 API Key 到外部渠道，避免被他人利用造成安全威脅。",
+    "info_tips": "API Key 是您存取 GTC 智能問數 API 的密鑰，具有帳戶的完全權限，請您務必妥善保管！不要以任何方式公開 API Key 到外部渠道，避免被他人利用造成安全威脅。",
     "create": "建立",
     "to_doc": "檢視 API",
     "trigger_limit": "最多支援建立 {0} 個 API Key"

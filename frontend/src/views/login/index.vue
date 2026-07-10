@@ -20,7 +20,7 @@
             <LOGO_fold v-else></LOGO_fold
           ></el-icon>
           <span style="margin-left: 14px; font-size: 34px; font-weight: 900; color: #485559">{{
-            appearanceStore.name
+            siteName
           }}</span>
         </div>
         <div v-if="appearanceStore.getShowSlogan" class="welcome">
@@ -85,11 +85,13 @@ import { useAppearanceStoreWithOut } from '@/stores/appearance'
 import loginImage from '@/assets/blue/login-image_blue.png'
 import Handler from './xpack/Handler.vue'
 import { toLoginSuccess } from '@/utils/utils'
+import { resolveSiteName } from '@/utils/brand'
 
 const showLoading = ref(true)
 const router = useRouter()
 const userStore = useUserStore()
 const appearanceStore = useAppearanceStoreWithOut()
+const siteName = computed(() => resolveSiteName(appearanceStore.name))
 const { t } = useI18n()
 const loginForm = ref({
   username: '',

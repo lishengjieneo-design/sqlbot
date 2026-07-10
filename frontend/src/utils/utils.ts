@@ -1,5 +1,6 @@
 import dayjs from 'dayjs'
 import { useCache } from '@/utils/useCache'
+import { resolveSiteName } from '@/utils/brand'
 import colorFunctions from 'less/lib/less/functions/color.js'
 import colorTree from 'less/lib/less/tree/color.js'
 
@@ -190,7 +191,7 @@ export const getCurrentRouter = () => {
 }
 
 export const setTitle = (title?: string) => {
-  document.title = title || 'SQLBot'
+  document.title = title || resolveSiteName()
 }
 
 function rgbToHex(r: any, g: any, b: any) {

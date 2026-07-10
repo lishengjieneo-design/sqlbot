@@ -3,9 +3,17 @@ import { store } from '@/stores/index.ts'
 import { request } from '@/utils/request.ts'
 import { formatArg } from '@/utils/utils.ts'
 
+export interface DefaultDatasourceInfo {
+  id: number
+  name: string
+  type: string
+  type_name?: string
+}
+
 interface ChatConfig {
   expand_thinking_block: boolean
   limit_rows: boolean
+  default_datasource: DefaultDatasourceInfo | null
 }
 
 export const chatConfigStore = defineStore('chatConfigStore', {
@@ -13,6 +21,7 @@ export const chatConfigStore = defineStore('chatConfigStore', {
     return {
       expand_thinking_block: false,
       limit_rows: true,
+      default_datasource: null,
     }
   },
   getters: {
@@ -21,6 +30,12 @@ export const chatConfigStore = defineStore('chatConfigStore', {
     },
     getLimitRows(): boolean {
       return this.limit_rows
+    },
+    getDefaultDatasource(): DefaultDatasourceInfo | null {
+      return this.default_datasource
+    },
+    getDefaultDatasourceId(): number | null {
+      return this.default_datasource?.id ?? null
     },
   },
   actions: {
@@ -36,6 +51,9 @@ export const chatConfigStore = defineStore('chatConfigStore', {
             }
           })
         }
+      })
+      request.get('/system/parameter/chat/default-datasource').then((res: any) => {
+        this.default_datasource = res?.id ? res : null
       })
     },
   },

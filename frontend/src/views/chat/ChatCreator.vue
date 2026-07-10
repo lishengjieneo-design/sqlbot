@@ -10,9 +10,11 @@ import Card from '@/views/ds/ChatCard.vue'
 import AddDrawer from '@/views/ds/AddDrawer.vue'
 import { useUserStore } from '@/stores/user'
 import { useAssistantStore } from '@/stores/assistant'
+import { useChatConfigStore } from '@/stores/chatConfig.ts'
 import { request } from '@/utils/request'
 const assistantStore = useAssistantStore()
 const userStore = useUserStore()
+const chatConfig = useChatConfigStore()
 
 const isWsAdmin = computed(() => userStore.isAdmin || userStore.isSpaceAdmin)
 const selectAssistantDs = computed(
@@ -64,6 +66,29 @@ const statusLoading = ref(false)
 function showDs() {
   listDs()
   datasourceConfigVisible.value = true
+}
+
+async function showDsOrDefault() {
+  const defaultId = chatConfig.getDefaultDatasourceId
+  if (defaultId) {
+    if (assistantStore.getType == 1) {
+      createChat(defaultId)
+      return
+    }
+    statusLoading.value = true
+    try {
+      const res: any = await datasourceApi.check_by_id(defaultId)
+      if (res) {
+        createChat(defaultId)
+        return
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      statusLoading.value = false
+    }
+  }
+  showDs()
 }
 
 function hideDs() {
@@ -149,6 +174,7 @@ const handleAddDatasource = () => {
 
 defineExpose({
   showDs,
+  showDsOrDefault,
   hideDs,
   createChat,
 })

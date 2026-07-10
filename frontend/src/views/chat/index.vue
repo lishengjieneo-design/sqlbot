@@ -120,7 +120,7 @@
                   ><custom_small v-if="appearanceStore.themeColor !== 'default'"></custom_small>
                   <LOGO_fold v-else></LOGO_fold
                 ></el-icon>
-                {{ appearanceStore.pc_welcome ?? '你好，我是 SQLBot' }}
+                {{ pcWelcomeText }}
               </div>
               <div class="sub">
                 {{
@@ -175,7 +175,7 @@
               ><custom_small v-if="appearanceStore.themeColor !== 'default'"></custom_small>
               <LOGO_fold v-else></LOGO_fold
             ></el-icon>
-            <span style="margin-left: 12px">{{ appearanceStore.name }}</span>
+            <span style="margin-left: 12px">{{ siteName }}</span>
           </div>
         </div>
         <el-scrollbar
@@ -501,6 +501,7 @@ import { onClickOutside } from '@vueuse/core'
 import { useAppearanceStoreWithOut } from '@/stores/appearance'
 import { useUserStore } from '@/stores/user'
 import { debounce } from 'lodash-es'
+import { formatPcWelcome, resolveSiteName } from '@/utils/brand'
 import { isMobile } from '@/utils/utils'
 import router from '@/router'
 import QuickQuestion from '@/views/chat/QuickQuestion.vue'
@@ -564,6 +565,11 @@ const scrollToBottom = debounce(() => {
 const loading = ref<boolean>(false)
 const chatList = ref<Array<ChatInfo>>([])
 const appearanceStore = useAppearanceStoreWithOut()
+const siteName = computed(() => resolveSiteName(appearanceStore.name))
+
+const pcWelcomeText = computed(() =>
+  formatPcWelcome(appearanceStore.pc_welcome, userStore.name || userStore.getName)
+)
 
 const currentChatId = ref<number | undefined>()
 const currentChat = ref<ChatInfo>(new ChatInfo())
@@ -695,7 +701,7 @@ const createNewChat = async () => {
     currentChatId.value = undefined
     return
   }
-  chatCreatorRef.value?.showDs()
+  chatCreatorRef.value?.showDsOrDefault()
 }
 
 function getChatList(callback?: () => void) {

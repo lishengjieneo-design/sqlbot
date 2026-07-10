@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from urllib.parse import unquote
 
 from fastapi import APIRouter, Body, HTTPException, Path
 from pydantic import BaseModel, Field
@@ -16,6 +17,7 @@ from apps.system.crud.authentication_manage import (
 from apps.system.crud.larksuite_sso import (
     LARKSUITE_ORIGIN,
     get_larksuite_config,
+    is_larksuite_in_app_state,
     resolve_user_for_larksuite,
     user_to_token_dto,
     validate_larksuite_state,
@@ -105,12 +107,21 @@ async def platform_sso(
     if not auth_model.enable:
         raise HTTPException(status_code=400, detail="larksuite platform disabled")
 
-    if not redirect_uri:
-        redirect_uri = cfg.redirect_uri or settings.FRONTEND_HOST
+    in_app = is_larksuite_in_app_state(state)
+    if in_app:
+        redirect_uri = ""
+    else:
+        redirect_uri = unquote(str(redirect_uri or "")).strip()
+        if not redirect_uri:
+            redirect_uri = cfg.redirect_uri or settings.FRONTEND_HOST
 
     client = LarksuiteClient(cfg)
     try:
-        lark_user, token_data = await client.login_with_code(code, redirect_uri)
+        lark_user, token_data = await client.login_with_code(
+            code,
+            redirect_uri,
+            in_app=in_app,
+        )
         user = await resolve_user_for_larksuite(session, lark_user, cfg, trans)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
