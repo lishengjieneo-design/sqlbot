@@ -82,7 +82,11 @@
     "synonyms_template_example_2": "Synonym3",
     "word_cannot_be_empty": "Term cannot be empty",
     "description_cannot_be_empty": "Term description cannot be empty",
-    "datasource_not_found": "Datasource not found"
+    "datasource_not_found": "Datasource not found",
+    "metric_kind": "Metric Semantics",
+    "metric_kind_required": "Metric semantics is required",
+    "metric_kind_invalid": "Invalid metric semantics. Choose: flow, balance, org_dimension, or product_dimension",
+    "metric_kind_template": "Metric semantics (required: flow/balance/org_dimension/product_dimension)"
   },
   "i18n_data_training": {
     "datasource_list_is_not_found": "Data source list not found",

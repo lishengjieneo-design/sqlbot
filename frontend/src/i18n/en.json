@@ -161,7 +161,12 @@
     "export": "Export",
     "selected_2_terms": "Delete the selected {msg} terms?",
     "selected_2_terms_de": "Export the selected {msg} terms?",
-    "the_term_gmv": "Delete the term: {msg}?"
+    "the_term_gmv": "Delete the term: {msg}?",
+    "metric_kind": "Metric semantics",
+    "metric_kind_flow": "Flow metric",
+    "metric_kind_balance": "Balance metric",
+    "metric_kind_org": "Organization dimension",
+    "metric_kind_product": "Product dimension"
   },
   "common": {
     "start_time": "Start Time",

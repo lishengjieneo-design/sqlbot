@@ -161,7 +161,12 @@
     "export": "导出",
     "selected_2_terms": "是否删除选中的 {msg} 条术语？",
     "selected_2_terms_de": "是否导出选中的 {msg} 条术语？",
-    "the_term_gmv": "是否删除术语：{msg}？"
+    "the_term_gmv": "是否删除术语：{msg}？",
+    "metric_kind": "指标语义",
+    "metric_kind_flow": "发生型指标",
+    "metric_kind_balance": "余额型指标",
+    "metric_kind_org": "组织维度",
+    "metric_kind_product": "产品维度"
   },
   "common": {
     "start_time": "开始时间",

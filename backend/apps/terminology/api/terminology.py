@@ -15,6 +15,7 @@ from apps.swagger.i18n import PLACEHOLDER_PREFIX
 from apps.system.schemas.permission import SqlbotPermission, require_permissions
 from apps.terminology.curd.terminology import page_terminology, create_terminology, update_terminology, \
     delete_terminology, enable_terminology, get_all_terminology, batch_create_terminology
+from apps.terminology.metric_kind import MetricKind, metric_kind_label_zh, normalize_metric_kind
 from apps.terminology.models.terminology_model import TerminologyInfo
 from common.core.config import settings
 from common.core.deps import SessionDep, CurrentUser, Trans
@@ -82,6 +83,7 @@ async def export_excel(session: SessionDep, trans: Trans, current_user: CurrentU
                 "description": obj.description,
                 "all_data_sources": 'N' if obj.specific_ds else 'Y',
                 "datasource": ', '.join(obj.datasource_names) if obj.datasource_names and obj.specific_ds else '',
+                "metric_kind": metric_kind_label_zh(obj.metric_kind or MetricKind.FLOW.value),
             }
             data_list.append(_data)
 
@@ -91,6 +93,7 @@ async def export_excel(session: SessionDep, trans: Trans, current_user: CurrentU
         fields.append(AxisObj(name=trans('i18n_terminology.term_description'), value='description'))
         fields.append(AxisObj(name=trans('i18n_terminology.effective_data_sources'), value='datasource'))
         fields.append(AxisObj(name=trans('i18n_terminology.all_data_sources'), value='all_data_sources'))
+        fields.append(AxisObj(name=trans('i18n_terminology.metric_kind'), value='metric_kind'))
 
         md_data, _fields_list = DataFormat.convert_object_array_for_pandas(fields, data_list)
 
@@ -119,6 +122,7 @@ async def excel_template(trans: Trans):
             "description": trans('i18n_terminology.term_description_template_example_1'),
             "all_data_sources": 'N',
             "datasource": trans('i18n_terminology.effective_data_sources_template_example_1'),
+            "metric_kind": metric_kind_label_zh(MetricKind.FLOW.value),
         }
         data_list.append(_data1)
         _data2 = {
@@ -127,6 +131,7 @@ async def excel_template(trans: Trans):
             "description": trans('i18n_terminology.term_description_template_example_2'),
             "all_data_sources": 'Y',
             "datasource": '',
+            "metric_kind": metric_kind_label_zh(MetricKind.BALANCE.value),
         }
         data_list.append(_data2)
 
@@ -136,6 +141,7 @@ async def excel_template(trans: Trans):
         fields.append(AxisObj(name=trans('i18n_terminology.term_description_template'), value='description'))
         fields.append(AxisObj(name=trans('i18n_terminology.effective_data_sources_template'), value='datasource'))
         fields.append(AxisObj(name=trans('i18n_terminology.all_data_sources_template'), value='all_data_sources'))
+        fields.append(AxisObj(name=trans('i18n_terminology.metric_kind_template'), value='metric_kind'))
 
         md_data, _fields_list = DataFormat.convert_object_array_for_pandas(fields, data_list)
 
@@ -180,7 +186,7 @@ async def upload_excel(trans: Trans, current_user: CurrentUser, file: UploadFile
 
     oid = current_user.oid
 
-    use_cols = [0, 1, 2, 3, 4]
+    use_cols = [0, 1, 2, 3, 4, 5]
 
     def inner():
 
@@ -217,9 +223,12 @@ async def upload_excel(trans: Trans, current_user: CurrentUser, file: UploadFile
                     3].strip() else []
                 all_datasource = True if pd.notna(row[4]) and row[4].lower().strip() in ['y', 'yes', 'true'] else False
                 specific_ds = False if all_datasource else True
+                metric_kind_raw = row[5].strip() if len(row) > 5 and pd.notna(row[5]) and row[5].strip() else ''
+                metric_kind = normalize_metric_kind(metric_kind_raw) or metric_kind_raw
 
                 import_data.append(TerminologyInfo(word=word, description=description, other_words=other_words,
-                                                   datasource_names=datasource_names, specific_ds=specific_ds))
+                                                   datasource_names=datasource_names, specific_ds=specific_ds,
+                                                   metric_kind=metric_kind))
 
         res = batch_create_terminology(session, import_data, oid, trans)
 
@@ -237,6 +246,7 @@ async def upload_excel(trans: Trans, current_user: CurrentUser, file: UploadFile
                     "all_data_sources": 'N' if obj['data'].specific_ds else 'Y',
                     "datasource": ', '.join(obj['data'].datasource_names) if obj['data'].datasource_names and obj[
                         'data'].specific_ds else '',
+                    "metric_kind": getattr(obj['data'], 'metric_kind', '') or '',
                     "errors": obj['errors']
                 }
                 data_list.append(_data)
@@ -247,6 +257,7 @@ async def upload_excel(trans: Trans, current_user: CurrentUser, file: UploadFile
             fields.append(AxisObj(name=trans('i18n_terminology.term_description'), value='description'))
             fields.append(AxisObj(name=trans('i18n_terminology.effective_data_sources'), value='datasource'))
             fields.append(AxisObj(name=trans('i18n_terminology.all_data_sources'), value='all_data_sources'))
+            fields.append(AxisObj(name=trans('i18n_terminology.metric_kind'), value='metric_kind'))
             fields.append(AxisObj(name=trans('i18n_data_training.error_info'), value='errors'))
 
             md_data, _fields_list = DataFormat.convert_object_array_for_pandas(fields, data_list)

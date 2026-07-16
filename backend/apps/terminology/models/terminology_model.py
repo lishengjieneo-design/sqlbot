@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from pgvector.sqlalchemy import VECTOR
 from pydantic import BaseModel
-from sqlalchemy import Column, Text, BigInteger, DateTime, Identity, Boolean
+from sqlalchemy import Column, Text, BigInteger, DateTime, Identity, Boolean, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import SQLModel, Field
 
@@ -20,6 +20,7 @@ class Terminology(SQLModel, table=True):
     specific_ds: Optional[bool] = Field(sa_column=Column(Boolean, default=False))
     datasource_ids: Optional[list[int]] = Field(sa_column=Column(JSONB), default=[])
     enabled: Optional[bool] = Field(sa_column=Column(Boolean, default=True))
+    metric_kind: Optional[str] = Field(default='flow', sa_column=Column(String(32), nullable=False, server_default='flow'))
 
 
 class TerminologyInfo(BaseModel):
@@ -32,3 +33,4 @@ class TerminologyInfo(BaseModel):
     datasource_ids: Optional[list[int]] = []
     datasource_names: Optional[list[str]] = []
     enabled: Optional[bool] = True
+    metric_kind: Optional[str] = 'flow'

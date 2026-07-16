@@ -161,7 +161,12 @@
     "export": "내보내기",
     "selected_2_terms": "선택된 {msg}개 용어를 삭제하시겠습니까?",
     "selected_2_terms_de": "선택된 {msg}개 용어를 내보내시겠습니까?",
-    "the_term_gmv": "용어를 삭제하시겠습니까: {msg}?"
+    "the_term_gmv": "용어를 삭제하시겠습니까: {msg}?",
+    "metric_kind": "지표 의미",
+    "metric_kind_flow": "발생형 지표",
+    "metric_kind_balance": "잔액형 지표",
+    "metric_kind_org": "조직 차원",
+    "metric_kind_product": "제품 차원"
   },
   "common": {
     "start_time": "시작 시간",

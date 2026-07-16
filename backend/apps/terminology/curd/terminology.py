@@ -12,9 +12,19 @@ from apps.ai_model.embedding import EmbeddingModelCache
 from apps.datasource.models.datasource import CoreDatasource
 from apps.template.generate_chart.generator import get_base_terminology_template
 from apps.terminology.models.terminology_model import Terminology, TerminologyInfo
+from apps.terminology.metric_kind import MetricKind, metric_kind_values, normalize_metric_kind
 from common.core.config import settings
 from common.core.deps import SessionDep, Trans
 from common.utils.embedding_threads import run_save_terminology_embeddings
+
+
+def validate_metric_kind(metric_kind: str | None, trans: Trans) -> str:
+    normalized = normalize_metric_kind(metric_kind)
+    if not normalized:
+        raise Exception(trans('i18n_terminology.metric_kind_required'))
+    if normalized not in metric_kind_values():
+        raise Exception(trans('i18n_terminology.metric_kind_invalid'))
+    return normalized
 
 
 def get_terminology_base_query(oid: int, name: Optional[str] = None):
@@ -137,6 +147,7 @@ def build_terminology_query(session: SessionDep, oid: int, name: Optional[str] =
             Terminology.word,
             Terminology.create_time,
             Terminology.description,
+            Terminology.metric_kind,
             Terminology.specific_ds,
             Terminology.datasource_ids,
             children_subquery.c.other_words,
@@ -161,6 +172,7 @@ def build_terminology_query(session: SessionDep, oid: int, name: Optional[str] =
             Terminology.word,
             Terminology.create_time,
             Terminology.description,
+            Terminology.metric_kind,
             Terminology.specific_ds,
             Terminology.datasource_ids,
             children_subquery.c.other_words,
@@ -185,6 +197,7 @@ def execute_terminology_query(session: SessionDep, stmt) -> List[TerminologyInfo
             word=row.word,
             create_time=row.create_time,
             description=row.description,
+            metric_kind=row.metric_kind or MetricKind.FLOW.value,
             other_words=row.other_words if row.other_words else [],
             specific_ds=row.specific_ds if row.specific_ds is not None else False,
             datasource_ids=row.datasource_ids if row.datasource_ids is not None else [],
@@ -234,6 +247,8 @@ def create_terminology(session: SessionDep, info: TerminologyInfo, oid: int, tra
     if not info.description or not info.description.strip():
         raise Exception(trans("i18n_terminology.description_cannot_be_empty"))
 
+    metric_kind = validate_metric_kind(info.metric_kind, trans)
+
     create_time = datetime.datetime.now()
 
     specific_ds = info.specific_ds if info.specific_ds is not None else False
@@ -247,6 +262,7 @@ def create_terminology(session: SessionDep, info: TerminologyInfo, oid: int, tra
         word=info.word.strip(),
         create_time=create_time,
         description=info.description.strip(),
+        metric_kind=metric_kind,
         oid=oid,
         specific_ds=specific_ds,
         enabled=info.enabled,
@@ -408,6 +424,12 @@ def batch_create_terminology(session: SessionDep, info_list: List[TerminologyInf
         if not info.description or not info.description.strip():
             error_messages.append(trans("i18n_terminology.description_cannot_be_empty"))
 
+        try:
+            metric_kind = validate_metric_kind(info.metric_kind, trans)
+        except Exception as e:
+            error_messages.append(str(e))
+            metric_kind = None
+
         # 根据specific_ds决定是否验证数据源
         specific_ds = info.specific_ds if info.specific_ds is not None else False
         datasource_ids = []
@@ -456,6 +478,7 @@ def batch_create_terminology(session: SessionDep, info_list: List[TerminologyInf
         processed_info = TerminologyInfo(
             word=info.word.strip(),
             description=info.description.strip(),
+            metric_kind=metric_kind,
             other_words=[w for w in info.other_words if w and w.strip()],  # 过滤空字符串
             datasource_ids=datasource_ids,
             datasource_names=info.datasource_names,
@@ -507,6 +530,8 @@ def update_terminology(session: SessionDep, info: TerminologyInfo, oid: int, tra
     ).count()
     if count == 0:
         raise Exception(trans('i18n_terminology.terminology_not_exists'))
+
+    metric_kind = validate_metric_kind(info.metric_kind, trans)
 
     specific_ds = info.specific_ds if info.specific_ds is not None else False
     datasource_ids = info.datasource_ids if info.datasource_ids is not None else []
@@ -564,6 +589,7 @@ def update_terminology(session: SessionDep, info: TerminologyInfo, oid: int, tra
     stmt = update(Terminology).where(and_(Terminology.id == info.id)).values(
         word=info.word.strip(),
         description=info.description.strip(),
+        metric_kind=metric_kind,
         specific_ds=specific_ds,
         datasource_ids=datasource_ids,
         enabled=info.enabled,
@@ -788,14 +814,17 @@ def select_terminology_by_word(session: SessionDep, word: str, oid: int, datasou
     if len(_ids) == 0:
         return []
 
-    t_list = session.query(Terminology.id, Terminology.pid, Terminology.word, Terminology.description).filter(
+    t_list = session.query(
+        Terminology.id, Terminology.pid, Terminology.word, Terminology.description, Terminology.metric_kind,
+    ).filter(
         or_(Terminology.id.in_(_ids), Terminology.pid.in_(_ids))).all()
     for row in t_list:
         pid = str(row.pid) if row.pid is not None else str(row.id)
         if _map.get(pid) is None:
-            _map[pid] = {'words': [], 'description': ''}
+            _map[pid] = {'words': [], 'description': '', 'metric_kind': MetricKind.FLOW.value}
         if row.pid is None:
             _map[pid]['description'] = row.description
+            _map[pid]['metric_kind'] = row.metric_kind or MetricKind.FLOW.value
         _map[pid]['words'].append(row.word)
 
     _results: list[dict] = []
@@ -819,7 +848,7 @@ def to_xml_string(_dict: list[dict] | dict, root: str = 'terminologies') -> str:
     item_name_func = lambda x: 'terminology' if x == 'terminologies' else 'word' if x == 'words' else 'item'
     dicttoxml.LOG.setLevel(logging.ERROR)
     xml = dicttoxml.dicttoxml(_dict,
-                              cdata=['word', 'description'],
+                              cdata=['word', 'description', 'metric_kind'],
                               custom_root=root,
                               item_func=item_name_func,
                               xml_declaration=False,

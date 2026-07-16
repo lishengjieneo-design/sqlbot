@@ -82,7 +82,11 @@
     "synonyms_template_example_2": "同義詞3",
     "word_cannot_be_empty": "術語名稱不能為空",
     "description_cannot_be_empty": "術語描述不能為空",
-    "datasource_not_found": "找不到數據源"
+    "datasource_not_found": "找不到數據源",
+    "metric_kind": "指標語義",
+    "metric_kind_required": "指標語義不能為空",
+    "metric_kind_invalid": "指標語義無效，請選擇：發生型指標、餘額型指標、組織維度、產品維度",
+    "metric_kind_template": "指標語義（必填：發生型指標/餘額型指標/組織維度/產品維度）"
   },
   "i18n_data_training": {
     "datasource_list_is_not_found": "數據源列表未找到",

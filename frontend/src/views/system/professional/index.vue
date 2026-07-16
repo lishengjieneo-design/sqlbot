@@ -24,6 +24,19 @@ interface Form {
   datasource_ids: number[]
   datasource_names: string[]
   description: string | null
+  metric_kind: string
+}
+
+const METRIC_KIND_OPTIONS = [
+  { value: 'flow', labelKey: 'professional.metric_kind_flow' },
+  { value: 'balance', labelKey: 'professional.metric_kind_balance' },
+  { value: 'org_dimension', labelKey: 'professional.metric_kind_org' },
+  { value: 'product_dimension', labelKey: 'professional.metric_kind_product' },
+]
+
+function metricKindLabel(value?: string | null) {
+  const opt = METRIC_KIND_OPTIONS.find((o) => o.value === value)
+  return opt ? t(opt.labelKey) : value || ''
 }
 
 const { t } = useI18n()
@@ -69,6 +82,7 @@ const defaultForm = {
   datasource_ids: [],
   other_words: [''],
   datasource_names: [],
+  metric_kind: 'flow',
 }
 const pageForm = ref<Form>(cloneDeep(defaultForm))
 
@@ -274,6 +288,12 @@ const rules = {
         t('datasource.please_enter') + t('common.empty') + t('professional.term_description'),
     },
   ],
+  metric_kind: [
+    {
+      required: true,
+      message: t('datasource.please_enter') + t('common.empty') + t('professional.metric_kind'),
+    },
+  ],
   datasource_ids: [
     {
       validator: validatePass,
@@ -323,6 +343,9 @@ const editHandler = (row: any) => {
   pageForm.value.id = null
   if (row) {
     pageForm.value = cloneDeep(row)
+    if (!pageForm.value.metric_kind) {
+      pageForm.value.metric_kind = 'flow'
+    }
     if (!pageForm.value.other_words.length) {
       pageForm.value.other_words = ['']
     }
@@ -497,6 +520,11 @@ const changeStatus = (id: any, val: any) => {
               }}
             </template>
           </el-table-column>
+          <el-table-column :label="$t('professional.metric_kind')" width="140">
+            <template #default="scope">
+              {{ metricKindLabel(scope.row.metric_kind) }}
+            </template>
+          </el-table-column>
           <el-table-column :label="$t('professional.term_description')" min-width="240"
             ><template #default="scope">
               <div class="field-comment_d">
@@ -649,6 +677,16 @@ const changeStatus = (id: any, val: any) => {
           type="textarea"
         />
       </el-form-item>
+      <el-form-item prop="metric_kind" :label="t('professional.metric_kind')">
+        <el-select v-model="pageForm.metric_kind" style="width: 100%">
+          <el-option
+            v-for="opt in METRIC_KIND_OPTIONS"
+            :key="opt.value"
+            :label="t(opt.labelKey)"
+            :value="opt.value"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item
         class="is-required"
         :class="!pageForm.specific_ds && 'no-error'"
@@ -756,6 +794,11 @@ const changeStatus = (id: any, val: any) => {
       <el-form-item :label="t('professional.term_description')">
         <div class="content">
           {{ pageForm.description }}
+        </div>
+      </el-form-item>
+      <el-form-item :label="t('professional.metric_kind')">
+        <div class="content">
+          {{ metricKindLabel(pageForm.metric_kind) }}
         </div>
       </el-form-item>
     </el-form>

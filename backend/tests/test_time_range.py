@@ -29,6 +29,19 @@ def test_question_with_relative_time():
     assert question_has_time_constraint('最近7天账户130032053入金') is True
 
 
+def test_question_with_chinese_word_number_time():
+    assert question_has_time_constraint('12312421 出入金，最近一个月') is True
+    assert question_has_time_constraint('近一个月入金') is True
+    assert question_has_time_constraint('过去三天业绩') is True
+    assert question_has_time_constraint('最近一月账户余额') is True
+
+
+def test_question_with_english_word_number_time():
+    assert question_has_time_constraint('deposits last one month for account X') is True
+    assert question_has_time_constraint('revenue past two weeks by region') is True
+    assert question_has_time_constraint('closed lots last a month for IB') is True
+
+
 def test_question_with_english_month():
     q = (
         'my bro can you share closed lots by IB oliverphamfs99@gmail.com '

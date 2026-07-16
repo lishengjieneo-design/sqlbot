@@ -84,7 +84,11 @@
     "synonyms_template_example_2": "동의어3",
     "word_cannot_be_empty": "용어는 비울 수 없습니다",
     "description_cannot_be_empty": "용어 설명은 비울 수 없습니다",
-    "datasource_not_found": "데이터 소스를 찾을 수 없음"
+    "datasource_not_found": "데이터 소스를 찾을 수 없음",
+    "metric_kind": "지표 의미",
+    "metric_kind_required": "지표 의미는 필수입니다",
+    "metric_kind_invalid": "유효하지 않은 지표 의미입니다",
+    "metric_kind_template": "지표 의미 (필수: flow/balance/org_dimension/product_dimension)"
   },
   "i18n_data_training": {
     "datasource_cannot_be_none": "데이터 소스는 비울 수 없습니다",

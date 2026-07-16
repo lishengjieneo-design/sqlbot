@@ -34,10 +34,17 @@ from apps.chat.id_schema_prefilter import (
     extract_numeric_ids,
     parse_id_fields_from_schema,
 )
+from apps.chat.balance_time_handler import MIXED_METRIC_KIND_HINT, classify_balance_time
+from apps.chat.metric_kind_resolver import (
+    MetricKindContext,
+    build_metric_kind_context,
+    should_skip_sql_time_filter,
+)
 from apps.chat.sql_time_filter_validator import sql_has_time_filter
 from apps.chat.time_config import get_query_earliest_date
 from apps.chat.time_range_prefilter import (
     build_time_range_clarification,
+    question_has_explicit_time_constraint,
     question_has_time_constraint,
 )
 from apps.chat.curd.chat import save_question, save_sql_answer, save_sql, \
@@ -61,6 +68,7 @@ from apps.system.crud.assistant import AssistantOutDs, AssistantOutDsFactory, ge
 from apps.system.crud.parameter_manage import get_groups
 from apps.system.schemas.system_schema import AssistantOutDsSchema
 from apps.terminology.curd.terminology import get_terminology_template
+from apps.terminology.metric_kind import SCENARIO_BALANCE_ONLY, SCENARIO_FLOW_ONLY, SCENARIO_MIXED, SCENARIO_NONE
 from apps.extra_prompt.crud.extra_prompt import find_enabled_extra_prompt
 from apps.extra_prompt.models.extra_prompt_model import ExtraPromptTypeEnum
 from common.core.config import settings
@@ -114,6 +122,9 @@ class LLMService:
     base_message_round_count_limit: int = settings.GENERATE_SQL_QUERY_HISTORY_ROUND_COUNT
     clarification_max_rounds: int = settings.CLARIFICATION_MAX_ROUNDS
     _force_clarification_finalize: bool = False
+    _metric_kind_context: Optional[MetricKindContext] = None
+    _balance_time_llm_hint: Optional[str] = None
+    _needs_mixed_metric_hint: bool = False
 
     def __init__(self, session: Session, current_user: CurrentUser, chat_question: ChatQuestion,
                  current_assistant: Optional[CurrentAssistant] = None, no_reasoning: bool = False,
@@ -344,6 +355,10 @@ class LLMService:
 
         self.chat_question.terminologies, term_list = get_terminology_template(_session, self.chat_question.question,
                                                                                calculate_oid, calculate_ds_id)
+        if settings.METRIC_KIND_TIME_RULES_ENABLED:
+            self._metric_kind_context = build_metric_kind_context(term_list)
+        else:
+            self._metric_kind_context = None
         self.current_logs[OperationEnum.FILTER_TERMS] = end_log(session=_session,
                                                                 log=self.current_logs[OperationEnum.FILTER_TERMS],
                                                                 full_message=term_list)
@@ -815,6 +830,77 @@ class LLMService:
             )
         return result
 
+    def _check_time_range_prefilter_global(
+        self, session: Session, question: str, clarification: dict,
+    ) -> Optional[dict]:
+        if question_has_time_constraint(question, clarification.get('resolved')):
+            return None
+        earliest = get_query_earliest_date(session)
+        SQLBotLogUtil.info(
+            f'clarification time prefilter triggered record={self.record.id} earliest={earliest}'
+        )
+        return build_time_range_clarification(earliest, lang=self.chat_question.lang)
+
+    def _check_time_range_prefilter_by_metric_kind(
+        self, session: Session, ctx: MetricKindContext, question: str, clarification: dict,
+    ) -> Optional[dict]:
+        resolved = clarification.get('resolved')
+
+        if ctx.scenario == SCENARIO_BALANCE_ONLY:
+            balance_time = classify_balance_time(question)
+            if balance_time.error_message:
+                raise SingleMessageError(orjson.dumps({
+                    'message': balance_time.error_message,
+                }).decode())
+            if balance_time.llm_hint:
+                self._balance_time_llm_hint = balance_time.llm_hint
+            SQLBotLogUtil.info(
+                f'metric_kind balance-only skip time prefilter record={self.record.id} '
+                f'balance_time={balance_time.kind.value}'
+            )
+            return None
+
+        has_time = question_has_explicit_time_constraint(question, resolved)
+
+        if ctx.scenario == SCENARIO_FLOW_ONLY:
+            if has_time:
+                return None
+            earliest = get_query_earliest_date(session)
+            SQLBotLogUtil.info(
+                f'metric_kind flow-only time prefilter record={self.record.id} earliest={earliest}'
+            )
+            return build_time_range_clarification(earliest, lang=self.chat_question.lang)
+
+        if ctx.scenario == SCENARIO_MIXED:
+            if has_time:
+                self._needs_mixed_metric_hint = True
+                SQLBotLogUtil.info(
+                    f'metric_kind mixed with explicit time record={self.record.id}'
+                )
+                return None
+            earliest = get_query_earliest_date(session)
+            SQLBotLogUtil.info(
+                f'metric_kind mixed time prefilter (flow only) record={self.record.id} earliest={earliest}'
+            )
+            self._needs_mixed_metric_hint = True
+            return build_time_range_clarification(earliest, lang=self.chat_question.lang)
+
+        return self._check_time_range_prefilter_global(session, question, clarification)
+
+    def _append_metric_kind_hints_to_sql_messages(self):
+        hints: list[str] = []
+        if self._balance_time_llm_hint:
+            hints.append(
+                f'<balance-time-hint>\n{self._balance_time_llm_hint}\n</balance-time-hint>'
+            )
+        if self._needs_mixed_metric_hint:
+            hints.append(MIXED_METRIC_KIND_HINT)
+        if not hints:
+            return
+        content = '\n'.join(hints)
+        self.sql_message.append(HumanMessage(content=content))
+        self.sql_message.append(AIMessage(content='我已了解本次指标语义与时间处理要求。'))
+
     def _check_time_range_prefilter(self, session: Session) -> Optional[dict]:
         if not settings.TIME_RANGE_CLARIFICATION_ENABLED:
             return None
@@ -824,13 +910,15 @@ class LLMService:
         if clarification.get('current'):
             return None
         question = self.chat_question.question or ''
-        if question_has_time_constraint(question, clarification.get('resolved')):
-            return None
-        earliest = get_query_earliest_date(session)
-        SQLBotLogUtil.info(
-            f'clarification time prefilter triggered record={self.record.id} earliest={earliest}'
-        )
-        return build_time_range_clarification(earliest, lang=self.chat_question.lang)
+
+        if settings.METRIC_KIND_TIME_RULES_ENABLED and self._metric_kind_context:
+            ctx = self._metric_kind_context
+            if ctx.scenario != SCENARIO_NONE:
+                return self._check_time_range_prefilter_by_metric_kind(
+                    session, ctx, question, clarification,
+                )
+
+        return self._check_time_range_prefilter_global(session, question, clarification)
 
     def generate_sql(self, _session: Session, skip_prefilter: bool = False):
         earliest = get_query_earliest_date(_session)
@@ -842,6 +930,7 @@ class LLMService:
             prefilter = self._check_schema_id_prefilter()
             if prefilter:
                 raise ClarificationRequiredError(prefilter)
+            self._append_metric_kind_hints_to_sql_messages()
         # append current question
         if not skip_prefilter:
             self.sql_message.append(HumanMessage(
@@ -1585,43 +1674,48 @@ class LLMService:
             sql_operate = resolved['sql_operate']
 
             if settings.SQL_TIME_FILTER_VALIDATION_ENABLED:
-                schema = self._get_schema_text()
-                clarification = (
-                    self.record.clarification if isinstance(self.record.clarification, dict) else {}
+                skip_time_filter = (
+                    settings.METRIC_KIND_TIME_RULES_ENABLED
+                    and should_skip_sql_time_filter(self._metric_kind_context)
                 )
-                time_resolved = get_time_range_resolved(clarification)
-                for attempt in range(settings.SQL_TIME_FILTER_MAX_RETRIES + 1):
-                    ok, reason = sql_has_time_filter(sql, schema, time_resolved)
-                    if ok:
-                        break
-                    if attempt >= settings.SQL_TIME_FILTER_MAX_RETRIES:
-                        raise SingleMessageError(orjson.dumps({
-                            'message': '生成的 SQL 未包含时间范围过滤，请补充时间后重试',
-                        }).decode())
-                    SQLBotLogUtil.info(
-                        f'sql time filter retry record={self.record.id} '
-                        f'attempt={attempt + 1} reason={reason}'
+                if not skip_time_filter:
+                    schema = self._get_schema_text()
+                    clarification = (
+                        self.record.clarification if isinstance(self.record.clarification, dict) else {}
                     )
-                    if in_chat:
-                        yield 'data:' + orjson.dumps({
-                            'type': 'info',
-                            'msg': 'SQL 缺少时间过滤，正在重新生成…',
-                        }).decode() + '\n\n'
-                    for chunk in self._regenerate_sql_for_time_filter(_session, reason, in_chat):
-                        yield chunk
-                    self.record = get_chat_record_by_id(_session, self.record.id)
-                    raw_answer = self.record.sql_answer or ''
-                    try:
-                        full_sql_text = orjson.loads(raw_answer).get('content', raw_answer)
-                    except Exception:
-                        full_sql_text = raw_answer
-                    resolved = self._resolve_sql_for_execution(
-                        _session, full_sql_text, sql_operate, use_dynamic_ds, is_page_embedded,
-                    )
-                    sql = resolved['sql']
-                    tables = resolved['tables']
-                    real_execute_sql = resolved['real_execute_sql']
-                    sql_operate = resolved['sql_operate']
+                    time_resolved = get_time_range_resolved(clarification)
+                    for attempt in range(settings.SQL_TIME_FILTER_MAX_RETRIES + 1):
+                        ok, reason = sql_has_time_filter(sql, schema, time_resolved)
+                        if ok:
+                            break
+                        if attempt >= settings.SQL_TIME_FILTER_MAX_RETRIES:
+                            raise SingleMessageError(orjson.dumps({
+                                'message': '生成的 SQL 未包含时间范围过滤，请补充时间后重试',
+                            }).decode())
+                        SQLBotLogUtil.info(
+                            f'sql time filter retry record={self.record.id} '
+                            f'attempt={attempt + 1} reason={reason}'
+                        )
+                        if in_chat:
+                            yield 'data:' + orjson.dumps({
+                                'type': 'info',
+                                'msg': 'SQL 缺少时间过滤，正在重新生成…',
+                            }).decode() + '\n\n'
+                        for chunk in self._regenerate_sql_for_time_filter(_session, reason, in_chat):
+                            yield chunk
+                        self.record = get_chat_record_by_id(_session, self.record.id)
+                        raw_answer = self.record.sql_answer or ''
+                        try:
+                            full_sql_text = orjson.loads(raw_answer).get('content', raw_answer)
+                        except Exception:
+                            full_sql_text = raw_answer
+                        resolved = self._resolve_sql_for_execution(
+                            _session, full_sql_text, sql_operate, use_dynamic_ds, is_page_embedded,
+                        )
+                        sql = resolved['sql']
+                        tables = resolved['tables']
+                        real_execute_sql = resolved['real_execute_sql']
+                        sql_operate = resolved['sql_operate']
 
             if isinstance(self.record.clarification, dict) and self.record.clarification:
                 done_state = {**self.record.clarification, 'current': None}

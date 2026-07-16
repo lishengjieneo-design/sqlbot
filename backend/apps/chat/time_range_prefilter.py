@@ -23,11 +23,20 @@ _DATE_PATTERNS = (
     re.compile(r'\d{4}年\d{1,2}月'),
     re.compile(r'\d{4}年'),
 )
+
+# Arabic digits or Chinese numerals (e.g. 最近一个月 / 近7天 / 过去三天).
+_CN_NUM = r'(?:\d+|[一二三四五六七八九十百千万两]+)'
+_CN_TIME_UNIT = r'[天日周月年]'
+_CN_RELATIVE_DURATION = (
+    rf'最近\s*{_CN_NUM}\s*个?\s*{_CN_TIME_UNIT}|'
+    rf'近\s*{_CN_NUM}\s*个?\s*{_CN_TIME_UNIT}|'
+    rf'过去\s*{_CN_NUM}\s*个?\s*{_CN_TIME_UNIT}'
+)
+
 _RELATIVE_TIME_RE = re.compile(
     r'今天|今日|昨天|昨日|前天|本周|这周|上周|本月|这个月|上月|上个月|'
     r'本季度|上季度|今年|去年|前年|'
-    r'最近\s*\d+\s*[天日周月年]|近\s*\d+\s*[天日周月年]|'
-    r'过去\s*\d+\s*[天日周月年]|'
+    + _CN_RELATIVE_DURATION + r'|'
     r'Q[1-4]|第[一二三四]季度',
     re.I,
 )
@@ -43,11 +52,18 @@ _EN_MONTH_TIME_RE = re.compile(
     rf'|\b(?:may)\s+\d{{2,4}}\b',
     re.I,
 )
+# English digits or word numbers (e.g. last 30 days / last one month / past two weeks).
+_EN_NUM = (
+    r'(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|'
+    r'eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|'
+    r'twenty|thirty|forty|fifty|sixty|ninety|a|an|couple|few|several)'
+)
+_EN_DURATION_UNIT = r'(?:days?|weeks?|months?|years?)'
+
 _EN_RELATIVE_TIME_RE = re.compile(
     r'\b(?:today|yesterday|this\s+week|last\s+week|this\s+month|last\s+month|'
     r'this\s+year|last\s+year|year\s+to\s+date|ytd|'
-    r'last\s+\d+\s+(?:days?|weeks?|months?|years?)|'
-    r'past\s+\d+\s+(?:days?|weeks?|months?|years?)|'
+    rf'(?:last|past)\s+{_EN_NUM}\s+{_EN_DURATION_UNIT}|'
     r'(?:last|past)\s+(?:day|week|month|year))\b',
     re.I,
 )
@@ -218,6 +234,21 @@ def question_has_time_constraint(question: str, resolved: Optional[list] = None)
     ):
         return True
     return False
+
+
+# Bare 最近/近期 without a quantifier — not explicit enough for flow metrics.
+_BARE_VAGUE_TIME_RE = re.compile(r'(?:最近|近期)(?![一二三四五六七八九十百千万两\d个])')
+
+
+def question_has_explicit_time_constraint(question: str, resolved: Optional[list] = None) -> bool:
+    """Stricter than question_has_time_constraint: bare 最近/近期 without quantity do not count."""
+    if not question_has_time_constraint(question, resolved):
+        return False
+    q = question.strip()
+    if not _BARE_VAGUE_TIME_RE.search(q):
+        return True
+    stripped = _BARE_VAGUE_TIME_RE.sub('', q)
+    return question_has_time_constraint(stripped, None)
 
 
 def build_time_range_clarification(
