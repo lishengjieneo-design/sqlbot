@@ -15,8 +15,15 @@ from apps.swagger.i18n import PLACEHOLDER_PREFIX
 from apps.system.schemas.permission import SqlbotPermission, require_permissions
 from apps.terminology.curd.terminology import page_terminology, create_terminology, update_terminology, \
     delete_terminology, enable_terminology, get_all_terminology, batch_create_terminology
+from apps.terminology.curd.metric_kind_crud import (
+    create_or_update_metric_kind,
+    delete_metric_kinds,
+    get_metric_kind_extras,
+    get_metric_kind_label_map,
+    list_metric_kinds,
+)
 from apps.terminology.metric_kind import MetricKind, metric_kind_label_zh, normalize_metric_kind
-from apps.terminology.models.terminology_model import TerminologyInfo
+from apps.terminology.models.terminology_model import TerminologyInfo, TerminologyMetricKindInfo
 from common.core.config import settings
 from common.core.deps import SessionDep, CurrentUser, Trans
 from common.utils.data_format import DataFormat
@@ -41,6 +48,35 @@ async def pager(session: SessionDep, current_user: CurrentUser, current_page: in
         "total_pages": total_pages,
         "data": _list
     }
+
+
+@router.get("/metric-kinds/options", summary=f"{PLACEHOLDER_PREFIX}list_metric_kind_options")
+@require_permissions(permission=SqlbotPermission(role=['ws_admin']))
+async def metric_kind_options(session: SessionDep, current_user: CurrentUser):
+    return list_metric_kinds(session, current_user.oid, enabled_only=True)
+
+
+@router.get("/metric-kinds", summary=f"{PLACEHOLDER_PREFIX}list_metric_kinds")
+@require_permissions(permission=SqlbotPermission(role=['ws_admin']))
+async def metric_kinds(session: SessionDep, current_user: CurrentUser):
+    return list_metric_kinds(session, current_user.oid, enabled_only=False)
+
+
+@router.put("/metric-kinds", summary=f"{PLACEHOLDER_PREFIX}create_or_update_metric_kind")
+@require_permissions(permission=SqlbotPermission(role=['ws_admin']))
+@system_log(LogConfig(operation_type=OperationType.CREATE_OR_UPDATE, module=OperationModules.TERMINOLOGY,
+                      resource_id_expr='info.id', result_id_expr="result_self"))
+async def put_metric_kind(session: SessionDep, current_user: CurrentUser, trans: Trans,
+                          info: TerminologyMetricKindInfo):
+    return create_or_update_metric_kind(session, info, current_user.oid, trans)
+
+
+@router.delete("/metric-kinds", summary=f"{PLACEHOLDER_PREFIX}delete_metric_kinds")
+@require_permissions(permission=SqlbotPermission(role=['ws_admin']))
+@system_log(LogConfig(operation_type=OperationType.DELETE, module=OperationModules.TERMINOLOGY,
+                      resource_id_expr='id_list'))
+async def remove_metric_kinds(session: SessionDep, current_user: CurrentUser, trans: Trans, id_list: list[int]):
+    delete_metric_kinds(session, id_list, current_user.oid, trans)
 
 
 @router.put("", summary=f"{PLACEHOLDER_PREFIX}create_or_update_term")
@@ -73,17 +109,19 @@ async def enable(session: SessionDep, id: int, enabled: bool, trans: Trans):
 async def export_excel(session: SessionDep, trans: Trans, current_user: CurrentUser,
                        word: Optional[str] = Query(None, description="搜索术语(可选)")):
     def inner():
+        label_map = get_metric_kind_label_map(session, current_user.oid)
         _list = get_all_terminology(session, word, oid=current_user.oid)
 
         data_list = []
         for obj in _list:
+            kind = obj.metric_kind or MetricKind.FLOW.value
             _data = {
                 "word": obj.word,
                 "other_words": ', '.join(obj.other_words) if obj.other_words else '',
                 "description": obj.description,
                 "all_data_sources": 'N' if obj.specific_ds else 'Y',
                 "datasource": ', '.join(obj.datasource_names) if obj.datasource_names and obj.specific_ds else '',
-                "metric_kind": metric_kind_label_zh(obj.metric_kind or MetricKind.FLOW.value),
+                "metric_kind": metric_kind_label_zh(kind, label_map),
             }
             data_list.append(_data)
 
@@ -113,8 +151,9 @@ async def export_excel(session: SessionDep, trans: Trans, current_user: CurrentU
 
 
 @router.get("/template", summary=f"{PLACEHOLDER_PREFIX}excel_template_term")
-async def excel_template(trans: Trans):
+async def excel_template(session: SessionDep, trans: Trans, current_user: CurrentUser):
     def inner():
+        label_map = get_metric_kind_label_map(session, current_user.oid)
         data_list = []
         _data1 = {
             "word": trans('i18n_terminology.term_name_template_example_1'),
@@ -122,7 +161,7 @@ async def excel_template(trans: Trans):
             "description": trans('i18n_terminology.term_description_template_example_1'),
             "all_data_sources": 'N',
             "datasource": trans('i18n_terminology.effective_data_sources_template_example_1'),
-            "metric_kind": metric_kind_label_zh(MetricKind.FLOW.value),
+            "metric_kind": metric_kind_label_zh(MetricKind.FLOW.value, label_map),
         }
         data_list.append(_data1)
         _data2 = {
@@ -131,7 +170,7 @@ async def excel_template(trans: Trans):
             "description": trans('i18n_terminology.term_description_template_example_2'),
             "all_data_sources": 'Y',
             "datasource": '',
-            "metric_kind": metric_kind_label_zh(MetricKind.BALANCE.value),
+            "metric_kind": metric_kind_label_zh(MetricKind.BALANCE.value, label_map),
         }
         data_list.append(_data2)
 
@@ -195,6 +234,7 @@ async def upload_excel(trans: Trans, current_user: CurrentUser, file: UploadFile
         sheet_names = pd.ExcelFile(save_path).sheet_names
 
         import_data = []
+        extras = get_metric_kind_extras(session, oid)
 
         for sheet_name in sheet_names:
 
@@ -224,7 +264,7 @@ async def upload_excel(trans: Trans, current_user: CurrentUser, file: UploadFile
                 all_datasource = True if pd.notna(row[4]) and row[4].lower().strip() in ['y', 'yes', 'true'] else False
                 specific_ds = False if all_datasource else True
                 metric_kind_raw = row[5].strip() if len(row) > 5 and pd.notna(row[5]) and row[5].strip() else ''
-                metric_kind = normalize_metric_kind(metric_kind_raw) or metric_kind_raw
+                metric_kind = normalize_metric_kind(metric_kind_raw, extras) or metric_kind_raw
 
                 import_data.append(TerminologyInfo(word=word, description=description, other_words=other_words,
                                                    datasource_names=datasource_names, specific_ds=specific_ds,

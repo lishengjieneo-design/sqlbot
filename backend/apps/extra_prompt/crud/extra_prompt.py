@@ -121,7 +121,12 @@ def get_extra_prompt(session: SessionDep, prompt_id: int, oid: int) -> ExtraProm
 
 
 def upsert_extra_prompt(session: SessionDep, info: ExtraPromptInfo, oid: int, trans: Trans) -> int:
-    if not info.prompt or not info.prompt.strip():
+    """Create/update metadata. Prompt body should go through draft/publish APIs.
+
+    On create, stores prompt text on the row but does NOT publish (no published_version_id).
+    On update, keeps published prompt column unless only meta fields change.
+    """
+    if info.id is None and (not info.prompt or not str(info.prompt).strip()):
         raise Exception(trans("prompt.replaced_with") if trans else "prompt cannot be empty")
     if not info.datasource_id:
         raise Exception(trans("i18n_terminology.datasource_cannot_be_none") if trans else "datasource cannot be empty")
@@ -130,7 +135,6 @@ def upsert_extra_prompt(session: SessionDep, info: ExtraPromptInfo, oid: int, tr
     if info.type != ExtraPromptTypeEnum.GENERATE_SQL.value:
         raise Exception("only GENERATE_SQL is supported")
 
-    # Uniqueness: (oid, datasource_id, type)
     exists_stmt = select(ExtraPrompt.id).where(
         and_(
             ExtraPrompt.oid == oid,
@@ -145,17 +149,18 @@ def upsert_extra_prompt(session: SessionDep, info: ExtraPromptInfo, oid: int, tr
     now = datetime.datetime.now()
 
     if info.id:
+        values = {
+            'datasource_id': info.datasource_id,
+            'type': info.type,
+            'description': (info.description.strip() if info.description else None),
+            'enabled': info.enabled,
+            'update_time': now,
+        }
+        # Do not overwrite published body via meta upsert; keep column as published text
         stmt = (
             update(ExtraPrompt)
             .where(and_(ExtraPrompt.id == info.id, ExtraPrompt.oid == oid))
-            .values(
-                datasource_id=info.datasource_id,
-                type=info.type,
-                description=(info.description.strip() if info.description else None),
-                prompt=info.prompt,
-                enabled=info.enabled,
-                update_time=now,
-            )
+            .values(**values)
         )
         session.execute(stmt)
         session.commit()
@@ -166,8 +171,10 @@ def upsert_extra_prompt(session: SessionDep, info: ExtraPromptInfo, oid: int, tr
         datasource_id=info.datasource_id,
         type=info.type,
         description=(info.description.strip() if info.description else None),
-        prompt=info.prompt,
+        prompt=info.prompt or '',
         enabled=True if info.enabled is None else info.enabled,
+        published_version_id=None,
+        draft_version_id=None,
         create_time=now,
         update_time=now,
     )
@@ -202,6 +209,9 @@ def find_enabled_extra_prompt(
     datasource_id: int,
     prompt_type: str = ExtraPromptTypeEnum.GENERATE_SQL.value,
 ) -> Optional[ExtraPromptInfo]:
+    """Return enabled extra prompt using published version content only."""
+    from apps.extra_prompt.models.version_model import ExtraPromptVersion
+
     prompt_type = _normalize_type(prompt_type)
     stmt = (
         select(
@@ -211,19 +221,24 @@ def find_enabled_extra_prompt(
             CoreDatasource.name.label("datasource_name"),
             ExtraPrompt.type,
             ExtraPrompt.description,
-            ExtraPrompt.prompt,
             ExtraPrompt.enabled,
             ExtraPrompt.create_time,
             ExtraPrompt.update_time,
+            ExtraPrompt.published_version_id,
+            ExtraPrompt.draft_version_id,
+            ExtraPromptVersion.version_no.label("published_version_no"),
+            ExtraPromptVersion.prompt.label("published_prompt"),
         )
         .select_from(ExtraPrompt)
         .outerjoin(CoreDatasource, CoreDatasource.id == ExtraPrompt.datasource_id)
+        .outerjoin(ExtraPromptVersion, ExtraPromptVersion.id == ExtraPrompt.published_version_id)
         .where(
             and_(
                 ExtraPrompt.oid == oid,
                 ExtraPrompt.datasource_id == datasource_id,
                 ExtraPrompt.type == prompt_type,
                 ExtraPrompt.enabled == True,  # noqa: E712
+                ExtraPrompt.published_version_id.is_not(None),
             )
         )
         .limit(1)
@@ -231,7 +246,9 @@ def find_enabled_extra_prompt(
     row = session.execute(stmt).first()
     if not row:
         return None
-    row = row[0] if isinstance(row, tuple) else row
+    content = getattr(row, "published_prompt", None)
+    if content is None:
+        return None
     return ExtraPromptInfo(
         id=row.id,
         oid=row.oid,
@@ -239,8 +256,11 @@ def find_enabled_extra_prompt(
         datasource_name=getattr(row, "datasource_name", None),
         type=row.type,
         description=row.description,
-        prompt=row.prompt,
+        prompt=content,
         enabled=row.enabled if row.enabled is not None else False,
+        published_version_id=row.published_version_id,
+        draft_version_id=row.draft_version_id,
+        published_version_no=getattr(row, "published_version_no", None),
         create_time=row.create_time,
         update_time=row.update_time,
     )

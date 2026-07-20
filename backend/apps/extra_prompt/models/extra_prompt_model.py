@@ -23,6 +23,8 @@ class ExtraPrompt(SQLModel, table=True):
     description: Optional[str] = Field(max_length=255, default=None)
     prompt: str = Field(sa_column=Column(Text, nullable=False))
     enabled: bool = Field(sa_column=Column(Boolean, nullable=False, default=True))
+    published_version_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, nullable=True))
+    draft_version_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     create_time: Optional[datetime] = Field(sa_column=Column(DateTime(timezone=False), nullable=True))
     update_time: Optional[datetime] = Field(sa_column=Column(DateTime(timezone=False), nullable=True))
 
@@ -36,6 +38,9 @@ class ExtraPromptInfo(BaseModel):
     description: Optional[str] = None
     prompt: str
     enabled: bool = True
+    published_version_id: Optional[int] = None
+    draft_version_id: Optional[int] = None
+    published_version_no: Optional[int] = None
     create_time: Optional[datetime] = None
     update_time: Optional[datetime] = None
 

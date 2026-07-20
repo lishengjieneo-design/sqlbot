@@ -12,19 +12,15 @@ from apps.ai_model.embedding import EmbeddingModelCache
 from apps.datasource.models.datasource import CoreDatasource
 from apps.template.generate_chart.generator import get_base_terminology_template
 from apps.terminology.models.terminology_model import Terminology, TerminologyInfo
-from apps.terminology.metric_kind import MetricKind, metric_kind_values, normalize_metric_kind
+from apps.terminology.metric_kind import MetricKind
+from apps.terminology.curd.metric_kind_crud import resolve_and_validate_metric_kind
 from common.core.config import settings
 from common.core.deps import SessionDep, Trans
 from common.utils.embedding_threads import run_save_terminology_embeddings
 
 
-def validate_metric_kind(metric_kind: str | None, trans: Trans) -> str:
-    normalized = normalize_metric_kind(metric_kind)
-    if not normalized:
-        raise Exception(trans('i18n_terminology.metric_kind_required'))
-    if normalized not in metric_kind_values():
-        raise Exception(trans('i18n_terminology.metric_kind_invalid'))
-    return normalized
+def validate_metric_kind(session: SessionDep, oid: int, metric_kind: str | None, trans: Trans) -> str:
+    return resolve_and_validate_metric_kind(session, oid, metric_kind, trans)
 
 
 def get_terminology_base_query(oid: int, name: Optional[str] = None):
@@ -247,7 +243,7 @@ def create_terminology(session: SessionDep, info: TerminologyInfo, oid: int, tra
     if not info.description or not info.description.strip():
         raise Exception(trans("i18n_terminology.description_cannot_be_empty"))
 
-    metric_kind = validate_metric_kind(info.metric_kind, trans)
+    metric_kind = validate_metric_kind(session, oid, info.metric_kind, trans)
 
     create_time = datetime.datetime.now()
 
@@ -425,7 +421,7 @@ def batch_create_terminology(session: SessionDep, info_list: List[TerminologyInf
             error_messages.append(trans("i18n_terminology.description_cannot_be_empty"))
 
         try:
-            metric_kind = validate_metric_kind(info.metric_kind, trans)
+            metric_kind = validate_metric_kind(session, oid, info.metric_kind, trans)
         except Exception as e:
             error_messages.append(str(e))
             metric_kind = None
@@ -531,7 +527,7 @@ def update_terminology(session: SessionDep, info: TerminologyInfo, oid: int, tra
     if count == 0:
         raise Exception(trans('i18n_terminology.terminology_not_exists'))
 
-    metric_kind = validate_metric_kind(info.metric_kind, trans)
+    metric_kind = validate_metric_kind(session, oid, info.metric_kind, trans)
 
     specific_ds = info.specific_ds if info.specific_ds is not None else False
     datasource_ids = info.datasource_ids if info.datasource_ids is not None else []

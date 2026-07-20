@@ -20,6 +20,7 @@ from apps.system.api import (
 )
 from apps.terminology.api import terminology
 from apps.extra_prompt.api import extra_prompt
+from apps.custom_prompt_version.api import router as custom_prompt_version_router
 from apps.settings.api import base
 
 
@@ -32,6 +33,8 @@ api_router.include_router(aimodel.router)
 api_router.include_router(base.router)
 api_router.include_router(terminology.router)
 api_router.include_router(extra_prompt.router)
+# Register before xpack so versioning paths take precedence over generic /{id}
+api_router.include_router(custom_prompt_version_router)
 api_router.include_router(data_training.router)
 api_router.include_router(datasource.router)
 api_router.include_router(chat.router)

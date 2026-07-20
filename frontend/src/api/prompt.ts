@@ -12,4 +12,11 @@ export const promptApi = {
       responseType: 'blob',
       requestOptions: { customError: true },
     }),
+  getVersioning: (id: number | string) => request.get(`/system/custom_prompt/${id}/versioning`),
+  listVersions: (id: number | string) => request.get(`/system/custom_prompt/${id}/versions`),
+  saveDraft: (id: number | string, data: { prompt: string; change_note?: string }) =>
+    request.put(`/system/custom_prompt/${id}/draft`, data),
+  publishDraft: (id: number | string) => request.post(`/system/custom_prompt/${id}/publish`),
+  publishVersion: (id: number | string, versionId: number | string) =>
+    request.post(`/system/custom_prompt/${id}/versions/${versionId}/publish`),
 }

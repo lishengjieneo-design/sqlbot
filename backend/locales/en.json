@@ -85,8 +85,17 @@
     "datasource_not_found": "Datasource not found",
     "metric_kind": "Metric Semantics",
     "metric_kind_required": "Metric semantics is required",
-    "metric_kind_invalid": "Invalid metric semantics. Choose: flow, balance, org_dimension, or product_dimension",
-    "metric_kind_template": "Metric semantics (required: flow/balance/org_dimension/product_dimension)"
+    "metric_kind_invalid": "Invalid metric semantics. Choose an enabled option from configuration",
+    "metric_kind_template": "Metric semantics (required: configured label or code)",
+    "metric_kind_label_required": "Metric semantics label is required",
+    "metric_kind_not_found": "Metric semantics option not found",
+    "metric_kind_code_invalid": "Invalid metric semantics code. Use lowercase letter start, then lowercase letters, digits, underscore; max 32",
+    "metric_kind_code_exists": "Metric semantics code already exists",
+    "metric_kind_code_reserved": "This code is reserved for built-in options",
+    "metric_kind_builtin_cannot_delete": "Built-in metric semantics cannot be deleted",
+    "metric_kind_builtin_code_immutable": "Built-in metric semantics code cannot be changed",
+    "metric_kind_flow_cannot_disable": "Flow (flow) cannot be disabled",
+    "metric_kind_in_use": "Metric semantics is referenced by terminology and cannot be deleted or renamed"
   },
   "i18n_data_training": {
     "datasource_list_is_not_found": "Data source list not found",
@@ -199,5 +208,9 @@
     "account": "Account",
     "email": "Email",
     "query_earliest_date": "Earliest queryable date"
+  },
+  "i18n_prompt": {
+    "version_not_found": "Version not found",
+    "no_draft_to_publish": "No draft to publish. Save a draft first."
   }
 }

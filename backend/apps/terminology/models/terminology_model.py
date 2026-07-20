@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from pgvector.sqlalchemy import VECTOR
 from pydantic import BaseModel
-from sqlalchemy import Column, Text, BigInteger, DateTime, Identity, Boolean, String
+from sqlalchemy import Column, Text, BigInteger, DateTime, Identity, Boolean, String, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import SQLModel, Field
 
@@ -34,3 +34,25 @@ class TerminologyInfo(BaseModel):
     datasource_names: Optional[list[str]] = []
     enabled: Optional[bool] = True
     metric_kind: Optional[str] = 'flow'
+
+
+class TerminologyMetricKind(SQLModel, table=True):
+    __tablename__ = "terminology_metric_kind"
+    id: Optional[int] = Field(sa_column=Column(BigInteger, Identity(always=True), primary_key=True))
+    oid: Optional[int] = Field(sa_column=Column(BigInteger, nullable=False))
+    code: Optional[str] = Field(max_length=32, sa_column=Column(String(32), nullable=False))
+    label: Optional[str] = Field(max_length=64, sa_column=Column(String(64), nullable=False))
+    sort_order: Optional[int] = Field(default=0, sa_column=Column(Integer, nullable=False, server_default='0'))
+    enabled: Optional[bool] = Field(sa_column=Column(Boolean, nullable=False, default=True, server_default='true'))
+    builtin: Optional[bool] = Field(sa_column=Column(Boolean, nullable=False, default=False, server_default='false'))
+    create_time: Optional[datetime] = Field(sa_column=Column(DateTime(timezone=False), nullable=True))
+
+
+class TerminologyMetricKindInfo(BaseModel):
+    id: Optional[int] = None
+    code: Optional[str] = None
+    label: Optional[str] = None
+    sort_order: Optional[int] = 0
+    enabled: Optional[bool] = True
+    builtin: Optional[bool] = False
+    create_time: Optional[datetime] = None

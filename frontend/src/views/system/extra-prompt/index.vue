@@ -95,28 +95,115 @@ const rules = {
 
 const editHandler = (row: any) => {
   pageForm.value = cloneDeep(defaultForm)
+  versioningState.value = null
   if (row) pageForm.value = cloneDeep(row)
   dialogTitle.value = row?.id ? t('extra_prompt.edit') : t('extra_prompt.create')
   dialogFormVisible.value = true
+  if (row?.id) {
+    loadVersioning(row.id)
+  }
 }
 
 const onFormClose = () => {
   pageForm.value = cloneDeep(defaultForm)
+  versioningState.value = null
   dialogFormVisible.value = false
+}
+
+const versioningState = ref<any>(null)
+const loadVersioning = async (id: any) => {
+  if (!id) {
+    versioningState.value = null
+    return
+  }
+  const res: any = await extraPromptApi.getVersioning(id)
+  versioningState.value = res
+  if (res?.draft?.prompt != null) {
+    pageForm.value.prompt = res.draft.prompt
+  } else if (res?.published?.prompt != null) {
+    pageForm.value.prompt = res.published.prompt
+  }
 }
 
 const saveHandler = () => {
   termFormRef.value.validate((res: any) => {
     if (!res) return
     const obj = unref(pageForm)
-    if (!obj.id) delete obj.id
+    updateLoading.value = true
+    const meta: any = {
+      ...obj,
+      prompt: versioningState.value?.published?.prompt ?? obj.prompt ?? '',
+    }
+    if (!meta.id) {
+      delete meta.id
+      meta.prompt = obj.prompt
+    }
+    extraPromptApi
+      .upsert(meta)
+      .then(async (createdId: any) => {
+        const id = obj.id || createdId
+        if (!id) throw new Error('missing prompt id')
+        pageForm.value.id = id
+        await extraPromptApi.saveDraft(id, { prompt: pageForm.value.prompt || '' })
+        await loadVersioning(id)
+        ElMessage({ type: 'success', message: t('extra_prompt.draft_saved') })
+        search()
+      })
+      .finally(() => {
+        updateLoading.value = false
+      })
+  })
+}
+
+const publishHandler = () => {
+  termFormRef.value.validate((res: any) => {
+    if (!res) return
+    const obj = unref(pageForm)
+    updateLoading.value = true
+    const run = async () => {
+      let id = obj.id as any
+      if (!id) {
+        const meta: any = { ...obj }
+        delete meta.id
+        id = await extraPromptApi.upsert(meta)
+        pageForm.value.id = id
+      } else {
+        await extraPromptApi.upsert({
+          ...obj,
+          prompt: versioningState.value?.published?.prompt ?? obj.prompt ?? '',
+        })
+      }
+      if (!id) throw new Error('missing prompt id')
+      await extraPromptApi.saveDraft(id, { prompt: pageForm.value.prompt || '' })
+      await extraPromptApi.publishDraft(id)
+      await loadVersioning(id)
+      ElMessage({ type: 'success', message: t('extra_prompt.publish_success') })
+      search()
+    }
+    run()
+      .catch(() => {})
+      .finally(() => {
+        updateLoading.value = false
+      })
+  })
+}
+
+const rollbackVersion = (ver: any) => {
+  if (!pageForm.value.id || !ver?.id) return
+  ElMessageBox.confirm(t('extra_prompt.rollback_confirm', { msg: ver.version_no }), {
+    confirmButtonType: 'primary',
+    confirmButtonText: t('extra_prompt.rollback_publish'),
+    cancelButtonText: t('common.cancel'),
+    customClass: 'confirm-no_icon',
+    autofocus: false,
+  }).then(() => {
     updateLoading.value = true
     extraPromptApi
-      .upsert(obj)
-      .then(() => {
-        ElMessage({ type: 'success', message: t('common.save_success') })
+      .publishVersion(pageForm.value.id!, ver.id)
+      .then(async () => {
+        ElMessage({ type: 'success', message: t('extra_prompt.publish_success') })
+        await loadVersioning(pageForm.value.id)
         search()
-        onFormClose()
       })
       .finally(() => {
         updateLoading.value = false
@@ -313,11 +400,63 @@ const handleCurrentChange = (val: number) => {
       <el-form-item prop="prompt" :label="t('extra_prompt.prompt')">
         <el-input v-model="pageForm.prompt" type="textarea" :autosize="{ minRows: 4, maxRows: 12 }" />
       </el-form-item>
+      <el-form-item>
+        <div style="color: #646a73; font-size: 12px; line-height: 18px">
+          {{ t('extra_prompt.draft_hint') }}
+          <template v-if="versioningState">
+            ·
+            <el-tag v-if="versioningState.published_version_id" size="small" type="success">
+              {{ t('extra_prompt.published') }}
+              v{{ versioningState.published?.version_no }}
+            </el-tag>
+            <el-tag v-else size="small" type="info">{{ t('extra_prompt.unpublished') }}</el-tag>
+            <el-tag
+              v-if="versioningState.draft_version_id"
+              size="small"
+              type="warning"
+              style="margin-left: 4px"
+            >
+              {{ t('extra_prompt.is_draft') }}
+              v{{ versioningState.draft?.version_no }}
+            </el-tag>
+          </template>
+        </div>
+      </el-form-item>
+      <el-form-item v-if="versioningState?.versions?.length" :label="t('extra_prompt.version_list')">
+        <el-table :data="versioningState.versions" size="small" style="width: 100%">
+          <el-table-column :label="t('extra_prompt.version_no')" width="90">
+            <template #default="scope">v{{ scope.row.version_no }}</template>
+          </el-table-column>
+          <el-table-column width="120">
+            <template #default="scope">
+              <el-tag v-if="scope.row.is_published" size="small" type="success">{{
+                t('extra_prompt.published')
+              }}</el-tag>
+              <el-tag v-else-if="scope.row.is_draft" size="small" type="warning">{{
+                t('extra_prompt.is_draft')
+              }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('ds.actions')" width="120">
+            <template #default="scope">
+              <el-button
+                v-if="!scope.row.is_published"
+                text
+                type="primary"
+                @click="rollbackVersion(scope.row)"
+              >
+                {{ t('extra_prompt.rollback_publish') }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-form-item>
     </el-form>
     <template #footer>
       <div v-loading="updateLoading" class="dialog-footer">
         <el-button secondary @click="onFormClose">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="saveHandler">{{ $t('common.save') }}</el-button>
+        <el-button secondary @click="saveHandler">{{ $t('extra_prompt.save_draft') }}</el-button>
+        <el-button type="primary" @click="publishHandler">{{ $t('extra_prompt.publish') }}</el-button>
       </div>
     </template>
   </el-drawer>

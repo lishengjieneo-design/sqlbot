@@ -87,8 +87,17 @@
     "datasource_not_found": "데이터 소스를 찾을 수 없음",
     "metric_kind": "지표 의미",
     "metric_kind_required": "지표 의미는 필수입니다",
-    "metric_kind_invalid": "유효하지 않은 지표 의미입니다",
-    "metric_kind_template": "지표 의미 (필수: flow/balance/org_dimension/product_dimension)"
+    "metric_kind_invalid": "유효하지 않은 지표 의미입니다. 설정된 사용 가능 옵션을 선택하세요",
+    "metric_kind_template": "지표 의미 (필수: 설정된 표시명 또는 코드)",
+    "metric_kind_label_required": "지표 의미 표시명은 필수입니다",
+    "metric_kind_not_found": "지표 의미 옵션을 찾을 수 없습니다",
+    "metric_kind_code_invalid": "지표 의미 코드가 유효하지 않습니다",
+    "metric_kind_code_exists": "지표 의미 코드가 이미 존재합니다",
+    "metric_kind_code_reserved": "이 코드는 내장 옵션용으로 예약되어 있습니다",
+    "metric_kind_builtin_cannot_delete": "내장 지표 의미는 삭제할 수 없습니다",
+    "metric_kind_builtin_code_immutable": "내장 지표 의미 코드는 변경할 수 없습니다",
+    "metric_kind_flow_cannot_disable": "발생형(flow)은 비활성화할 수 없습니다",
+    "metric_kind_in_use": "해당 지표 의미가 용어에서 사용 중이어서 삭제하거나 코드를 변경할 수 없습니다"
   },
   "i18n_data_training": {
     "datasource_cannot_be_none": "데이터 소스는 비울 수 없습니다",

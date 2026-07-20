@@ -85,8 +85,17 @@
     "datasource_not_found": "找不到数据源",
     "metric_kind": "指标语义",
     "metric_kind_required": "指标语义不能为空",
-    "metric_kind_invalid": "指标语义无效，请选择：发生型指标、余额型指标、组织维度、产品维度",
-    "metric_kind_template": "指标语义（必填：发生型指标/余额型指标/组织维度/产品维度）"
+    "metric_kind_invalid": "指标语义无效，请选择已配置且启用的选项",
+    "metric_kind_template": "指标语义（必填，使用后台配置的显示名或编码）",
+    "metric_kind_label_required": "指标语义显示名不能为空",
+    "metric_kind_not_found": "指标语义选项不存在",
+    "metric_kind_code_invalid": "指标语义编码无效，请使用小写字母开头，仅含小写字母、数字、下划线，最长32位",
+    "metric_kind_code_exists": "指标语义编码已存在",
+    "metric_kind_code_reserved": "该编码为系统内置保留码，请换用其他编码",
+    "metric_kind_builtin_cannot_delete": "内置指标语义不可删除",
+    "metric_kind_builtin_code_immutable": "内置指标语义编码不可修改",
+    "metric_kind_flow_cannot_disable": "发生型（flow）不可停用",
+    "metric_kind_in_use": "该指标语义已被术语引用，无法删除或修改编码"
   },
   "i18n_data_training": {
     "datasource_list_is_not_found": "数据源列表未找到",
@@ -199,5 +208,9 @@
     "account": "账号",
     "email": "邮箱",
     "query_earliest_date": "问数最早可查日期"
+  },
+  "i18n_prompt": {
+    "version_not_found": "版本不存在",
+    "no_draft_to_publish": "没有可发布的草稿，请先保存草稿"
   }
 }

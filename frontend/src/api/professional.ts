@@ -13,4 +13,9 @@ export const professionalApi = {
       responseType: 'blob',
       requestOptions: { customError: true },
     }),
+  listMetricKindOptions: () => request.get('/system/terminology/metric-kinds/options'),
+  listMetricKinds: () => request.get('/system/terminology/metric-kinds'),
+  saveMetricKind: (data: any) => request.put('/system/terminology/metric-kinds', data),
+  deleteMetricKinds: (ids: number[]) =>
+    request.delete('/system/terminology/metric-kinds', { data: ids }),
 }

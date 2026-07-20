@@ -12,7 +12,15 @@ from apps.extra_prompt.crud.extra_prompt import (
     page_extra_prompt,
     upsert_extra_prompt,
 )
+from apps.extra_prompt.crud.version_crud import (
+    get_versioning_state,
+    list_versions,
+    publish_draft,
+    publish_version,
+    save_draft,
+)
 from apps.extra_prompt.models.extra_prompt_model import ExtraPromptInfo, ExtraPromptTypeEnum
+from apps.extra_prompt.models.version_model import ExtraPromptDraftSave
 from common.core.deps import CurrentUser, SessionDep, Trans
 from common.audit.models.log_model import OperationType, OperationModules
 from common.audit.schemas.logger_decorator import LogConfig, system_log
@@ -51,6 +59,76 @@ async def pager(
     }
 
 
+@router.get("/active/find", summary=f"{PLACEHOLDER_PREFIX}find_active_extra_prompt")
+@require_permissions(permission=SqlbotPermission(role=["admin"]))
+async def find_active(
+    session: SessionDep,
+    current_user: CurrentUser,
+    datasource_id: int = Query(..., description="数据源ID"),
+):
+    return find_enabled_extra_prompt(
+        session=session,
+        oid=current_user.oid,
+        datasource_id=datasource_id,
+        prompt_type=ExtraPromptTypeEnum.GENERATE_SQL.value,
+    )
+
+
+@router.get("/{prompt_id}/versioning")
+@require_permissions(permission=SqlbotPermission(role=["admin"]))
+async def versioning_state(session: SessionDep, current_user: CurrentUser, prompt_id: int):
+    return get_versioning_state(session, prompt_id, current_user.oid)
+
+
+@router.get("/{prompt_id}/versions")
+@require_permissions(permission=SqlbotPermission(role=["admin"]))
+async def versions(session: SessionDep, current_user: CurrentUser, prompt_id: int):
+    return list_versions(session, prompt_id, current_user.oid)
+
+
+@router.put("/{prompt_id}/draft")
+@require_permissions(permission=SqlbotPermission(role=["admin"]))
+async def put_draft(
+    session: SessionDep,
+    current_user: CurrentUser,
+    trans: Trans,
+    prompt_id: int,
+    payload: ExtraPromptDraftSave,
+):
+    return save_draft(
+        session,
+        prompt_id,
+        current_user.oid,
+        payload,
+        created_by=getattr(current_user, "id", None),
+        trans=trans,
+    )
+
+
+@router.post("/{prompt_id}/publish")
+@require_permissions(permission=SqlbotPermission(role=["admin"]))
+async def post_publish(session: SessionDep, current_user: CurrentUser, trans: Trans, prompt_id: int):
+    return publish_draft(
+        session,
+        prompt_id,
+        current_user.oid,
+        created_by=getattr(current_user, "id", None),
+        trans=trans,
+    )
+
+
+@router.post("/{prompt_id}/versions/{version_id}/publish")
+@require_permissions(permission=SqlbotPermission(role=["admin"]))
+async def post_publish_version(
+    session: SessionDep,
+    current_user: CurrentUser,
+    trans: Trans,
+    prompt_id: int,
+    version_id: int,
+):
+    return publish_version(session, prompt_id, version_id, current_user.oid, trans=trans)
+
+
 @router.get("/{id}", summary=f"{PLACEHOLDER_PREFIX}get_extra_prompt_one")
 @require_permissions(permission=SqlbotPermission(role=["admin"]))
 async def get_one(session: SessionDep, current_user: CurrentUser, id: int):
@@ -87,19 +165,3 @@ async def delete(session: SessionDep, current_user: CurrentUser, id_list: list[i
 )
 async def enable(session: SessionDep, current_user: CurrentUser, id: int, enabled: bool):
     enable_extra_prompt(session=session, oid=current_user.oid, prompt_id=id, enabled=enabled)
-
-
-@router.get("/active/find", summary=f"{PLACEHOLDER_PREFIX}find_active_extra_prompt")
-@require_permissions(permission=SqlbotPermission(role=["admin"]))
-async def find_active(
-    session: SessionDep,
-    current_user: CurrentUser,
-    datasource_id: int = Query(..., description="数据源ID"),
-):
-    return find_enabled_extra_prompt(
-        session=session,
-        oid=current_user.oid,
-        datasource_id=datasource_id,
-        prompt_type=ExtraPromptTypeEnum.GENERATE_SQL.value,
-    )
-

@@ -85,8 +85,17 @@
     "datasource_not_found": "找不到數據源",
     "metric_kind": "指標語義",
     "metric_kind_required": "指標語義不能為空",
-    "metric_kind_invalid": "指標語義無效，請選擇：發生型指標、餘額型指標、組織維度、產品維度",
-    "metric_kind_template": "指標語義（必填：發生型指標/餘額型指標/組織維度/產品維度）"
+    "metric_kind_invalid": "指標語義無效，請選擇已配置且啟用的選項",
+    "metric_kind_template": "指標語義（必填，使用後台配置的顯示名或編碼）",
+    "metric_kind_label_required": "指標語義顯示名不能為空",
+    "metric_kind_not_found": "指標語義選項不存在",
+    "metric_kind_code_invalid": "指標語義編碼無效，請使用小寫字母開頭，僅含小寫字母、數字、底線，最長32位",
+    "metric_kind_code_exists": "指標語義編碼已存在",
+    "metric_kind_code_reserved": "該編碼為系統內建保留碼，請換用其他編碼",
+    "metric_kind_builtin_cannot_delete": "內建指標語義不可刪除",
+    "metric_kind_builtin_code_immutable": "內建指標語義編碼不可修改",
+    "metric_kind_flow_cannot_disable": "發生型（flow）不可停用",
+    "metric_kind_in_use": "該指標語義已被術語引用，無法刪除或修改編碼"
   },
   "i18n_data_training": {
     "datasource_list_is_not_found": "數據源列表未找到",

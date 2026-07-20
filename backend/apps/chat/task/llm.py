@@ -18,8 +18,8 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, BaseMe
 from sqlalchemy import and_, select
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlbot_xpack.config.model import SysArgModel
-from sqlbot_xpack.custom_prompt.curd.custom_prompt import find_custom_prompts
 from sqlbot_xpack.custom_prompt.models.custom_prompt_model import CustomPromptTypeEnum
+from apps.custom_prompt_version.runtime import find_published_custom_prompts
 from sqlbot_xpack.license.license_manage import SQLBotLicenseUtil
 from sqlmodel import Session
 
@@ -376,9 +376,9 @@ class LLMService:
                                                                               operate=OperationEnum.FILTER_CUSTOM_PROMPT,
                                                                               record_id=self.record.id,
                                                                               local_operation=True)
-            self.chat_question.custom_prompt, prompt_list = find_custom_prompts(_session, custom_prompt_type,
-                                                                                calculate_oid,
-                                                                                calculate_ds_id)
+            self.chat_question.custom_prompt, prompt_list = find_published_custom_prompts(
+                _session, custom_prompt_type, calculate_oid, calculate_ds_id
+            )
             self.current_logs[OperationEnum.FILTER_CUSTOM_PROMPT] = end_log(session=_session,
                                                                             log=self.current_logs[
                                                                                 OperationEnum.FILTER_CUSTOM_PROMPT],
@@ -410,7 +410,14 @@ class LLMService:
             )
             if prompt_info and prompt_info.prompt:
                 prompt_text = prompt_info.prompt
-                prompt_list = [prompt_text]
+                prompt_list = [{
+                    'id': prompt_info.id,
+                    'name': prompt_info.description or prompt_info.datasource_name or '',
+                    'type': prompt_info.type,
+                    'version_id': prompt_info.published_version_id,
+                    'version_no': prompt_info.published_version_no,
+                    'prompt': prompt_text,
+                }]
 
         self.current_logs[OperationEnum.FILTER_EXTRA_PROMPT] = end_log(
             session=_session,

@@ -23,6 +23,33 @@ const list = computed(() => {
 const title = computed(() => {
   return t('chat.find_custom_prompt_title', [list.value.length])
 })
+
+function isStructured(ele: any) {
+  return ele && typeof ele === 'object' && !Array.isArray(ele) && ('prompt' in ele || 'name' in ele)
+}
+
+function escapeHtml(s: any) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function displayHtml(ele: any) {
+  if (isStructured(ele)) {
+    const name = escapeHtml(ele.name || '')
+    const ver =
+      ele.version_no != null
+        ? ` v${escapeHtml(ele.version_no)}`
+        : ele.version_id != null
+          ? ` #${escapeHtml(ele.version_id)}`
+          : ''
+    const body = escapeHtml(ele.prompt || '').replace(/\n/g, '<br/>')
+    return `<div><strong>${name}${ver}</strong></div><div style="margin-top:8px">${body}</div>`
+  }
+  return ele
+}
 </script>
 
 <template>
@@ -34,7 +61,7 @@ const title = computed(() => {
       <div class="inner-title">{{ title }}</div>
       <div v-if="list.length > 0" style="margin-top: 8px" class="item-list">
         <div v-for="(ele, index) in list" :key="index" class="inner-item">
-          <div v-dompurify-html="ele" class="inner-item-description" />
+          <div v-dompurify-html="displayHtml(ele)" class="inner-item-description" />
         </div>
       </div>
     </template>

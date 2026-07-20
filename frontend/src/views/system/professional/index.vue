@@ -27,19 +27,162 @@ interface Form {
   metric_kind: string
 }
 
-const METRIC_KIND_OPTIONS = [
-  { value: 'flow', labelKey: 'professional.metric_kind_flow' },
-  { value: 'balance', labelKey: 'professional.metric_kind_balance' },
-  { value: 'org_dimension', labelKey: 'professional.metric_kind_org' },
-  { value: 'product_dimension', labelKey: 'professional.metric_kind_product' },
-]
-
-function metricKindLabel(value?: string | null) {
-  const opt = METRIC_KIND_OPTIONS.find((o) => o.value === value)
-  return opt ? t(opt.labelKey) : value || ''
+interface MetricKindOption {
+  id?: number
+  code: string
+  label: string
+  sort_order?: number
+  enabled?: boolean
+  builtin?: boolean
 }
 
 const { t } = useI18n()
+
+const metricKindOptions = ref<MetricKindOption[]>([])
+const metricKindManageList = ref<MetricKindOption[]>([])
+const metricKindManageVisible = ref(false)
+const metricKindFormVisible = ref(false)
+const metricKindFormLoading = ref(false)
+const metricKindManageLoading = ref(false)
+const metricKindSelection = ref<MetricKindOption[]>([])
+const metricKindFormTitle = ref('')
+const defaultMetricKindForm = {
+  id: null as number | null,
+  code: '',
+  label: '',
+  sort_order: 0,
+  enabled: true,
+  builtin: false,
+}
+const metricKindForm = ref(cloneDeep(defaultMetricKindForm))
+const metricKindFormRef = ref()
+
+function metricKindLabel(value?: string | null) {
+  const opt = metricKindOptions.value.find((o) => o.code === value)
+  if (opt) return opt.label
+  const all = metricKindManageList.value.find((o) => o.code === value)
+  return all?.label || value || ''
+}
+
+const loadMetricKindOptions = async () => {
+  const res = await professionalApi.listMetricKindOptions()
+  metricKindOptions.value = Array.isArray(res) ? res : []
+}
+
+const openMetricKindManage = async () => {
+  metricKindManageVisible.value = true
+  await loadMetricKindManageList()
+}
+
+const loadMetricKindManageList = async () => {
+  metricKindManageLoading.value = true
+  try {
+    const res = await professionalApi.listMetricKinds()
+    metricKindManageList.value = Array.isArray(res) ? res : []
+  } finally {
+    metricKindManageLoading.value = false
+  }
+}
+
+const editMetricKindHandler = (row?: MetricKindOption | null) => {
+  if (row) {
+    metricKindForm.value = {
+      id: row.id ?? null,
+      code: row.code,
+      label: row.label,
+      sort_order: row.sort_order ?? 0,
+      enabled: row.enabled !== false,
+      builtin: !!row.builtin,
+    }
+    metricKindFormTitle.value = t('professional.metric_kind_edit')
+  } else {
+    metricKindForm.value = cloneDeep(defaultMetricKindForm)
+    metricKindFormTitle.value = t('professional.metric_kind_add')
+  }
+  metricKindFormVisible.value = true
+}
+
+const onMetricKindFormClose = () => {
+  metricKindForm.value = cloneDeep(defaultMetricKindForm)
+  metricKindFormVisible.value = false
+}
+
+const saveMetricKindHandler = () => {
+  metricKindFormRef.value?.validate((ok: boolean) => {
+    if (!ok) return
+    const payload: any = {
+      code: metricKindForm.value.code,
+      label: metricKindForm.value.label,
+      sort_order: metricKindForm.value.sort_order,
+      enabled: metricKindForm.value.enabled,
+    }
+    if (metricKindForm.value.id) {
+      payload.id = metricKindForm.value.id
+    }
+    metricKindFormLoading.value = true
+    professionalApi
+      .saveMetricKind(payload)
+      .then(async () => {
+        ElMessage({ type: 'success', message: t('common.save_success') })
+        onMetricKindFormClose()
+        await loadMetricKindManageList()
+        await loadMetricKindOptions()
+      })
+      .finally(() => {
+        metricKindFormLoading.value = false
+      })
+  })
+}
+
+const deleteMetricKindBatch = () => {
+  const ids = metricKindSelection.value
+    .filter((ele) => !ele.builtin && ele.id != null)
+    .map((ele) => ele.id as number)
+  if (!ids.length) {
+    return
+  }
+  ElMessageBox.confirm(t('professional.metric_kind_delete_confirm', { msg: ids.length }), {
+    confirmButtonType: 'danger',
+    confirmButtonText: t('dashboard.delete'),
+    cancelButtonText: t('common.cancel'),
+    customClass: 'confirm-no_icon',
+    autofocus: false,
+  }).then(() => {
+    professionalApi.deleteMetricKinds(ids).then(async () => {
+      ElMessage({ type: 'success', message: t('common.save_success') })
+      metricKindSelection.value = []
+      await loadMetricKindManageList()
+      await loadMetricKindOptions()
+    })
+  })
+}
+
+const metricKindSelectable = (row: MetricKindOption) => !row.builtin
+
+const onMetricKindSelectionChange = (rows: MetricKindOption[]) => {
+  metricKindSelection.value = rows
+}
+
+const metricKindRules = {
+  code: [
+    {
+      required: true,
+      message: t('datasource.please_enter') + t('common.empty') + t('professional.metric_kind_code'),
+    },
+    {
+      pattern: /^[a-z][a-z0-9_]{0,31}$/,
+      message: t('professional.metric_kind_code_hint'),
+    },
+  ],
+  label: [
+    {
+      required: true,
+      message:
+        t('datasource.please_enter') + t('common.empty') + t('professional.metric_kind_label'),
+    },
+  ],
+}
+
 const multipleSelectionAll = ref<any[]>([])
 const allDsList = ref<any[]>([])
 const keywords = ref('')
@@ -54,6 +197,7 @@ onMounted(() => {
   datasourceApi.list().then((res) => {
     filterOption.value[0].option = [...res]
   })
+  loadMetricKindOptions()
   search()
 })
 const dialogFormVisible = ref<boolean>(false)
@@ -482,6 +626,9 @@ const changeStatus = (id: any, val: any) => {
           </template>
           {{ $t('user.filter') }}
         </el-button>
+        <el-button class="no-margin" secondary @click="openMetricKindManage">
+          {{ $t('professional.manage_metric_kind') }}
+        </el-button>
         <el-button class="no-margin" type="primary" @click="editHandler(null)">
           <template #icon>
             <icon_add_outlined></icon_add_outlined>
@@ -680,10 +827,10 @@ const changeStatus = (id: any, val: any) => {
       <el-form-item prop="metric_kind" :label="t('professional.metric_kind')">
         <el-select v-model="pageForm.metric_kind" style="width: 100%">
           <el-option
-            v-for="opt in METRIC_KIND_OPTIONS"
-            :key="opt.value"
-            :label="t(opt.labelKey)"
-            :value="opt.value"
+            v-for="opt in metricKindOptions"
+            :key="opt.code"
+            :label="opt.label"
+            :value="opt.code"
           />
         </el-select>
       </el-form-item>
@@ -808,6 +955,109 @@ const changeStatus = (id: any, val: any) => {
     :filter-options="filterOption"
     @trigger-filter="searchCondition"
   />
+
+  <el-drawer
+    v-model="metricKindManageVisible"
+    :title="t('professional.manage_metric_kind')"
+    size="720px"
+    destroy-on-close
+  >
+    <div style="display: flex; gap: 8px; margin-bottom: 12px">
+      <el-button type="primary" @click="editMetricKindHandler(null)">
+        <template #icon>
+          <icon_add_outlined />
+        </template>
+        {{ t('professional.metric_kind_add') }}
+      </el-button>
+      <el-button
+        type="danger"
+        :disabled="!metricKindSelection.filter((e) => !e.builtin).length"
+        @click="deleteMetricKindBatch"
+      >
+        {{ t('dashboard.delete') }}
+      </el-button>
+    </div>
+    <el-table
+      v-loading="metricKindManageLoading"
+      :data="metricKindManageList"
+      style="width: 100%"
+      @selection-change="onMetricKindSelectionChange"
+    >
+      <el-table-column type="selection" width="48" :selectable="metricKindSelectable" />
+      <el-table-column prop="code" :label="t('professional.metric_kind_code')" width="160" />
+      <el-table-column prop="label" :label="t('professional.metric_kind_label')" min-width="140" />
+      <el-table-column prop="sort_order" :label="t('professional.metric_kind_sort')" width="80" />
+      <el-table-column :label="t('professional.metric_kind_enabled')" width="90">
+        <template #default="scope">
+          <el-tag v-if="scope.row.enabled" size="small" type="success">Y</el-tag>
+          <el-tag v-else size="small" type="info">N</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('professional.metric_kind_builtin')" width="90">
+        <template #default="scope">
+          <el-tag v-if="scope.row.builtin" size="small">{{
+            t('professional.metric_kind_builtin')
+          }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column width="80" fixed="right">
+        <template #default="scope">
+          <el-button text type="primary" @click.stop="editMetricKindHandler(scope.row)">
+            <el-icon size="16"><IconOpeEdit /></el-icon>
+          </el-button>
+        </template>
+      </el-table-column>
+      <template #empty>
+        <div style="padding: 24px">{{ t('professional.metric_kind_empty') }}</div>
+      </template>
+    </el-table>
+  </el-drawer>
+
+  <el-drawer
+    v-model="metricKindFormVisible"
+    :title="metricKindFormTitle"
+    size="480px"
+    destroy-on-close
+    :before-close="onMetricKindFormClose"
+  >
+    <el-form
+      ref="metricKindFormRef"
+      :model="metricKindForm"
+      :rules="metricKindRules"
+      label-position="top"
+      @submit.prevent
+    >
+      <el-form-item prop="code" :label="t('professional.metric_kind_code')">
+        <el-input
+          v-model="metricKindForm.code"
+          :disabled="!!metricKindForm.builtin"
+          :placeholder="t('professional.metric_kind_code_hint')"
+          maxlength="32"
+          clearable
+        />
+      </el-form-item>
+      <el-form-item prop="label" :label="t('professional.metric_kind_label')">
+        <el-input v-model="metricKindForm.label" maxlength="64" clearable />
+      </el-form-item>
+      <el-form-item :label="t('professional.metric_kind_sort')">
+        <el-input-number v-model="metricKindForm.sort_order" :min="0" :max="9999" />
+      </el-form-item>
+      <el-form-item :label="t('professional.metric_kind_enabled')">
+        <el-switch
+          v-model="metricKindForm.enabled"
+          :disabled="metricKindForm.code === 'flow'"
+        />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <div style="display: flex; justify-content: flex-end; gap: 8px">
+        <el-button secondary @click="onMetricKindFormClose">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="metricKindFormLoading" @click="saveMetricKindHandler">
+          {{ t('common.save') }}
+        </el-button>
+      </div>
+    </template>
+  </el-drawer>
 </template>
 
 <style lang="less" scoped>
