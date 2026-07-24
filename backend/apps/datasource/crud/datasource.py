@@ -24,6 +24,7 @@ from ..crud.field import delete_field_by_ds_id, update_field
 from ..crud.table import delete_table_by_ds_id, update_table
 from ..models.datasource import CoreDatasource, CreateDatasource, CoreTable, CoreField, ColumnSchema, TableObj, \
     DatasourceConf, TableAndFields
+from ..crud.llm_preview import format_field_schema_line, format_llm_preview_block
 
 
 def get_datasource_list(session: SessionDep, user: CurrentUser, oid: Optional[int] = None) -> List[CoreDatasource]:
@@ -265,6 +266,9 @@ def sync_fields(session: SessionDep, ds: CoreDatasource, table: CoreTable, field
             synchronize_session=False)
         session.commit()
 
+    # Field set changed — invalidate cached LLM preview (regenerate on next tab open)
+    from apps.datasource.crud.llm_preview import clear_table_llm_preview
+    clear_table_llm_preview(session, table.id, commit=True)
 
 def update_table_and_fields(session: SessionDep, data: TableObj):
     update_table(session, data.table)
@@ -458,17 +462,17 @@ def get_table_schema(session: SessionDep, current_user: CurrentUser, ds: CoreDat
         if obj.fields:
             field_list = []
             for field in obj.fields:
-                field_comment = ''
-                if field.custom_comment:
-                    field_comment = field.custom_comment.strip()
-                if field_comment == '':
-                    field_list.append(f"({field.field_name}:{field.field_type})")
-                else:
-                    field_list.append(f"({field.field_name}:{field.field_type}, {field_comment})")
+                field_list.append(format_field_schema_line(field, obj.table.llm_preview))
             schema_table += ",\n".join(field_list)
         schema_table += '\n]\n'
 
-        t_obj = {"id": obj.table.id, "schema_table": schema_table, "embedding": obj.table.embedding}
+        t_obj = {
+            "id": obj.table.id,
+            "schema_table": schema_table,
+            "embedding": obj.table.embedding,
+            "llm_preview": obj.table.llm_preview,
+            "field_names": [f.field_name for f in (obj.fields or [])],
+        }
         tables.append(t_obj)
         all_tables.append(t_obj)
 
@@ -483,6 +487,9 @@ def get_table_schema(session: SessionDep, current_user: CurrentUser, ds: CoreDat
     if tables:
         for s in tables:
             schema_str += s.get('schema_table')
+            preview_block = format_llm_preview_block(s.get('llm_preview'), s.get('field_names'))
+            if preview_block:
+                schema_str += preview_block
 
     # field relation
     if tables and ds.table_relation:

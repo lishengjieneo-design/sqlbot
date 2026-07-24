@@ -22,6 +22,8 @@ export const datasourceApi = {
     request.post(`/datasource/fieldList/${id}`, data),
   edit: (data: any) => request.post('/datasource/editLocalComment', data),
   previewData: (id: number, data: any) => request.post(`/datasource/previewData/${id}`, data),
+  llmPreview: (dsId: number, tableId: number) =>
+    request.post(`/datasource/llmPreview/${dsId}/${tableId}`),
   saveTable: (data: any) => request.post('/datasource/editTable', data),
   saveField: (data: any) => request.post('/datasource/editField', data),
   getDs: (id: number) => request.post(`/datasource/get/${id}`),

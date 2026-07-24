@@ -22,8 +22,8 @@ services:
       BACKEND_CORS_ORIGINS: "http://47.83.2.158:8000,http://localhost,http://localhost:5173,https://localhost,https://localhost:5173"
       LOG_LEVEL: "INFO"
       SQL_DEBUG: "False"
-      EMBEDDING_ENABLED: "false"
-      TABLE_EMBEDDING_ENABLED: "false"
+      EMBEDDING_ENABLED: "true"
+      TABLE_EMBEDDING_ENABLED: "true"
     volumes:
       - ./data/sqlbot/excel:/opt/sqlbot/data/excel
       - ./data/sqlbot/file:/opt/sqlbot/data/file

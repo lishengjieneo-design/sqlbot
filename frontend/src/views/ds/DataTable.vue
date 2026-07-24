@@ -151,6 +151,32 @@ const fieldComment = ref('')
 const currentField = ref<any>({})
 const previewData = ref<any>({})
 const fieldList = ref<any>([])
+const llmPreviewData = ref<any>(null)
+const llmPreviewLoading = ref(false)
+
+const semanticRoleOptions = computed(() => [
+  { value: 'pk', label: t('ds.semantic_role_pk') },
+  { value: 'metric', label: t('ds.semantic_role_metric') },
+  { value: 'high_dim', label: t('ds.semantic_role_high_dim') },
+  { value: 'low_dim', label: t('ds.semantic_role_low_dim') },
+  { value: 'time', label: t('ds.semantic_role_time') },
+])
+
+const llmPreviewRowColumns = computed(() => {
+  const rows = llmPreviewData.value?.rows
+  if (!rows?.length) return [] as string[]
+  return Object.keys(rows[0])
+})
+
+const llmPreviewEnumEntries = computed(() => {
+  const enums = llmPreviewData.value?.enums || {}
+  return Object.keys(enums).map((k) => ({ field: k, values: enums[k] }))
+})
+
+const llmPreviewTimeEntries = computed(() => {
+  const times = llmPreviewData.value?.time_samples || {}
+  return Object.keys(times).map((k) => ({ field: k, value: times[k] }))
+})
 
 const buildData = () => {
   return { table: currentTable.value, fields: fieldList.value }
@@ -167,6 +193,8 @@ const clickTable = (table: any) => {
   fieldList.value = []
   pageInfo.total = 0
   previewData.value = []
+  llmPreviewData.value = null
+  btnSelect.value = 'd'
   datasourceApi
     .fieldList(table.id)
     .then((res) => {
@@ -254,6 +282,44 @@ const changeStatus = (row: any) => {
       showClose: true,
     })
   })
+}
+
+const changeSemanticRole = (row: any) => {
+  // empty select -> null for backend
+  const payload = {
+    ...row,
+    semantic_role: row.semantic_role || null,
+  }
+  // enforce single pk in UI: clear other pks locally
+  if (payload.semantic_role === 'pk') {
+    fieldList.value.forEach((f: any) => {
+      if (f.id !== row.id && f.semantic_role === 'pk') {
+        f.semantic_role = null
+      }
+    })
+  }
+  datasourceApi.saveField(payload).then(() => {
+    row.semantic_role = payload.semantic_role
+    ElMessage({
+      message: t('common.save_success'),
+      type: 'success',
+      showClose: true,
+    })
+  })
+}
+
+const loadLlmPreview = () => {
+  if (!currentTable.value?.id) return
+  llmPreviewLoading.value = true
+  datasourceApi
+    .llmPreview(props.info.id, currentTable.value.id)
+    .then((res) => {
+      llmPreviewData.value = res
+    })
+    .finally(() => {
+      llmPreviewLoading.value = false
+      loading.value = false
+    })
 }
 
 const syncFields = () => {
@@ -351,7 +417,7 @@ const btnSelectClick = (val: any) => {
       .finally(() => {
         loading.value = false
       })
-  } else {
+  } else if (val === 'q') {
     datasourceApi
       .previewData(props.info.id, buildData())
       .then((res) => {
@@ -360,6 +426,8 @@ const btnSelectClick = (val: any) => {
       .finally(() => {
         loading.value = false
       })
+  } else if (val === 'l') {
+    loadLlmPreview()
   }
 }
 </script>
@@ -533,6 +601,13 @@ const btnSelectClick = (val: any) => {
             >
               {{ t('ds.preview') }}
             </el-button>
+            <el-button
+              :class="[btnSelect === 'l' && 'is-active']"
+              text
+              @click="btnSelectClick('l')"
+            >
+              {{ t('ds.llm_preview') }}
+            </el-button>
           </div>
           <div v-if="btnSelect === 'd'" class="field-name">
             <el-input
@@ -556,7 +631,7 @@ const btnSelectClick = (val: any) => {
           <div
             v-if="!loading"
             class="preview-or-schema"
-            :class="btnSelect === 'q' && 'overflow-preview'"
+            :class="(btnSelect === 'q' || btnSelect === 'l') && 'overflow-preview'"
           >
             <div v-if="btnSelect === 'd'" class="table-content_preview">
               <el-table
@@ -595,6 +670,25 @@ const btnSelectClick = (val: any) => {
                         </el-icon>
                       </el-tooltip>
                     </div>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('ds.semantic_role')" width="160">
+                  <template #default="scope">
+                    <el-select
+                      v-model="scope.row.semantic_role"
+                      size="small"
+                      clearable
+                      :placeholder="t('ds.semantic_role_empty')"
+                      style="width: 140px"
+                      @change="changeSemanticRole(scope.row)"
+                    >
+                      <el-option
+                        v-for="opt in semanticRoleOptions"
+                        :key="opt.value"
+                        :label="opt.label"
+                        :value="opt.value"
+                      />
+                    </el-select>
                   </template>
                 </el-table-column>
                 <el-table-column :label="t('datasource.enabled_status')" width="180">
@@ -637,6 +731,79 @@ const btnSelectClick = (val: any) => {
                     :render-header="renderHeader"
                   />
                 </el-table>
+              </div>
+            </template>
+            <template v-if="btnSelect === 'l'">
+              <div class="preview-num" style="display: flex; align-items: center; gap: 12px">
+                <span>{{ t('ds.llm_preview_tip') }}</span>
+                <el-button
+                  size="small"
+                  :loading="llmPreviewLoading"
+                  @click="loadLlmPreview"
+                >
+                  {{ t('ds.llm_preview_resample') }}
+                </el-button>
+                <span v-if="llmPreviewData?.sampled_at" style="color: #909399">
+                  {{ llmPreviewData.sampled_at }}
+                </span>
+              </div>
+              <div v-loading="llmPreviewLoading" class="table-container llm-preview-panel">
+                <template v-if="llmPreviewData">
+                  <div class="llm-preview-section">
+                    <div class="llm-preview-title">{{ t('ds.llm_preview_rows') }}</div>
+                    <el-table
+                      v-if="llmPreviewData.rows?.length"
+                      :data="llmPreviewData.rows"
+                      style="width: 100%"
+                      max-height="320"
+                    >
+                      <el-table-column
+                        v-for="c in llmPreviewRowColumns"
+                        :key="c"
+                        :prop="c"
+                        :label="c"
+                        min-width="120"
+                        show-overflow-tooltip
+                      />
+                    </el-table>
+                    <div v-else class="llm-preview-empty">{{ t('ds.llm_preview_empty') }}</div>
+                  </div>
+                  <div class="llm-preview-section">
+                    <div class="llm-preview-title">{{ t('ds.llm_preview_enums') }}</div>
+                    <template v-if="llmPreviewEnumEntries.length">
+                      <div
+                        v-for="item in llmPreviewEnumEntries"
+                        :key="item.field"
+                        class="llm-preview-enum-row"
+                      >
+                        <strong>{{ item.field }}</strong>:
+                        {{
+                          (item.values || [])
+                            .map((v: any) => (v === null || v === undefined ? 'null' : String(v)))
+                            .join(', ')
+                        }}
+                      </div>
+                    </template>
+                    <div v-else class="llm-preview-empty">{{ t('ds.llm_preview_empty') }}</div>
+                  </div>
+                  <div class="llm-preview-section">
+                    <div class="llm-preview-title">{{ t('ds.llm_preview_time') }}</div>
+                    <template v-if="llmPreviewTimeEntries.length">
+                      <div
+                        v-for="item in llmPreviewTimeEntries"
+                        :key="item.field"
+                        class="llm-preview-enum-row"
+                      >
+                        <strong>{{ item.field }}</strong>:
+                        {{ item.value === null || item.value === undefined ? 'null' : item.value }}
+                      </div>
+                    </template>
+                    <div v-else class="llm-preview-empty">{{ t('ds.llm_preview_empty') }}</div>
+                  </div>
+                </template>
+                <div v-else-if="!llmPreviewLoading" class="llm-preview-empty">
+                  {{ t('ds.llm_preview_empty') }}
+                </div>
               </div>
             </template>
           </div>
@@ -1061,6 +1228,29 @@ const btnSelectClick = (val: any) => {
           .table-container {
             width: 100%;
             height: calc(100% - 46px);
+          }
+
+          .llm-preview-panel {
+            overflow: auto;
+            padding-right: 8px;
+            .llm-preview-section {
+              margin-bottom: 16px;
+            }
+            .llm-preview-title {
+              font-weight: 500;
+              margin-bottom: 8px;
+              color: #1f2329;
+            }
+            .llm-preview-enum-row {
+              font-size: 13px;
+              line-height: 22px;
+              color: #646a73;
+              word-break: break-all;
+            }
+            .llm-preview-empty {
+              color: #8f959e;
+              font-size: 13px;
+            }
           }
         }
       }

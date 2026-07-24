@@ -34,6 +34,8 @@ class CoreTable(SQLModel, table=True):
     table_comment: str = Field(sa_column=Column(Text))
     custom_comment: str = Field(sa_column=Column(Text))
     embedding: str = Field(sa_column=Column(Text, nullable=True))
+    # Cached LLM preview: rows / enums / time_samples (see llm_preview.py)
+    llm_preview: Optional[dict] = Field(default=None, sa_column=Column(JSONB, nullable=True))
 
 
 class DsRecommendedProblem(SQLModel, table=True):
@@ -58,6 +60,8 @@ class CoreField(SQLModel, table=True):
     field_comment: str = Field(sa_column=Column(Text))
     custom_comment: str = Field(sa_column=Column(Text))
     field_index: int = Field(sa_column=Column(BigInteger()))
+    # pk | metric | high_dim | low_dim | time ; empty/None => unknown in schema
+    semantic_role: Optional[str] = Field(default=None, max_length=32, nullable=True)
 
 
 # datasource create obj

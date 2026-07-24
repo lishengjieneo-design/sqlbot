@@ -239,6 +239,28 @@ async def preview_data(session: SessionDep, trans: Trans, current_user: CurrentU
     return await asyncio.to_thread(inner)
 
 
+@router.post(
+    "/llmPreview/{ds_id}/{table_id}",
+    summary=f"{PLACEHOLDER_PREFIX}ds_llm_preview",
+)
+@require_permissions(permission=SqlbotPermission(role=['ws_admin'], type='ds', keyExpression="ds_id"))
+async def llm_preview(
+    session: SessionDep,
+    current_user: CurrentUser,
+    ds_id: int = Path(..., description=f"{PLACEHOLDER_PREFIX}ds_id"),
+    table_id: int = Path(..., description=f"{PLACEHOLDER_PREFIX}ds_table_id"),
+):
+    def inner():
+        from apps.datasource.crud.llm_preview import refresh_llm_preview
+        try:
+            return refresh_llm_preview(session, current_user, ds_id, table_id)
+        except Exception as e:
+            SQLBotLogUtil.error(f"LLM preview sample failed: {e}")
+            raise HTTPException(status_code=500, detail=f'LLM Preview Failed: {e}')
+
+    return await asyncio.to_thread(inner)
+
+
 # not used
 @router.post("/fieldEnum/{id}", include_in_schema=False)
 async def field_enum(session: SessionDep, id: int):
