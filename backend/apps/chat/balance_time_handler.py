@@ -61,7 +61,12 @@ def _is_time_range(question: str) -> bool:
         return True
     if _RELATIVE_TIME_RE.search(q) and not _SINGLE_POINT_RE.fullmatch(q):
         # Relative durations like 本月 still count as range for balance-only rules.
-        if re.search(r'本月|这个月|上月|上个月|本季度|上季度|今年|去年|本周|这周|上周', q):
+        if re.search(
+            r'本月|这个月|当月|上月|上个月|上一月|本季度|这个季度|上季度|上个季度|'
+            r'今年|本年|本年度|这一年|这个年度|去年|上一年|上一年度|上年度|去年度|前年|'
+            r'本周|这周|这个周|这个星期|上周|上一周|上个星期',
+            q,
+        ):
             return True
     if _EN_RELATIVE_TIME_RE.search(q):
         return True

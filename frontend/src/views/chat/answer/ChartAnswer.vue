@@ -186,6 +186,28 @@ async function consumeStream(
           case 'sql-data':
             getChatData(_currentChat.value.records[index.value].id)
             break
+          case 'field-aliases':
+            if (Array.isArray(data.content)) {
+              _currentChat.value.records[index.value].field_aliases = data.content
+            }
+            break
+          case 'layout':
+            // BlueCard P2: backend layout decision (optional FE consumption)
+            if (data.layout) {
+              ;(_currentChat.value.records[index.value] as any).layout = data.layout
+            }
+            break
+          case 'summary-result':
+            if (data.content) {
+              const prev = _currentChat.value.records[index.value].summary || ''
+              _currentChat.value.records[index.value].summary = prev + data.content
+            }
+            break
+          case 'summary':
+            if (data.content) {
+              _currentChat.value.records[index.value].summary = data.content
+            }
+            break
           case 'chart-result':
             chart_answer_ref.value += data.reasoning_content
             _currentChat.value.records[index.value].chart_answer = chart_answer_ref.value

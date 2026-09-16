@@ -5,6 +5,24 @@ export type TimePresetCandidate = {
   date_end?: string
 }
 
+/** Layout A — calendar period chips (row 1) */
+export const TIME_PRESET_CALENDAR_FIELDS = [
+  'today',
+  'yesterday',
+  'this_week',
+  'last_week',
+  'this_month',
+  'last_month',
+  'this_year',
+] as const
+
+/** Layout A — rolling / all-time chips (row 2) */
+export const TIME_PRESET_RANGE_FIELDS = [
+  'last_7_days',
+  'last_30_days',
+  'all_time',
+] as const
+
 function parseIsoDate(s: string): Date {
   const [y, m, d] = s.split('-').map(Number)
   const dt = new Date(y, (m || 1) - 1, d || 1)
@@ -43,8 +61,19 @@ function buildPresetMap(
   const yesterday = new Date(today)
   yesterday.setDate(today.getDate() - 1)
   const weekStart = weekStartMonday(today)
+  const lastWeekEnd = new Date(weekStart)
+  lastWeekEnd.setDate(weekStart.getDate() - 1)
+  const lastWeekStart = new Date(lastWeekEnd)
+  lastWeekStart.setDate(lastWeekEnd.getDate() - 6)
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
   monthStart.setHours(0, 0, 0, 0)
+  const lastMonthEnd = new Date(monthStart)
+  lastMonthEnd.setDate(0) // last day of previous month
+  lastMonthEnd.setHours(0, 0, 0, 0)
+  const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1)
+  lastMonthStart.setHours(0, 0, 0, 0)
+  const yearStart = new Date(today.getFullYear(), 0, 1)
+  yearStart.setHours(0, 0, 0, 0)
 
   const pack = (field: string, start: Date, end: Date) => {
     const s = clampStart(start, earliest)
@@ -62,7 +91,10 @@ function buildPresetMap(
     pack('today', today, today),
     pack('yesterday', yesterday, yesterday),
     pack('this_week', weekStart, today),
+    pack('last_week', lastWeekStart, lastWeekEnd),
     pack('this_month', monthStart, today),
+    pack('last_month', lastMonthStart, lastMonthEnd),
+    pack('this_year', yearStart, today),
     pack('last_7_days', last7, today),
     pack('last_30_days', last30, today),
   ]
@@ -75,10 +107,10 @@ export function enrichTimeCandidates(
   earliestDate: string,
   currentDate?: string
 ): TimePresetCandidate[] {
-  if (!candidates?.length) {
-    return Object.values(buildPresetMap(earliestDate, currentDate)) as TimePresetCandidate[]
-  }
   const presetMap = buildPresetMap(earliestDate, currentDate)
+  if (!candidates?.length) {
+    return Object.values(presetMap) as TimePresetCandidate[]
+  }
   const merged: TimePresetCandidate[] = []
   const seen = new Set<string>()
   for (const item of candidates) {
@@ -92,8 +124,12 @@ export function enrichTimeCandidates(
       date_end: item.date_end || base?.date_end,
     })
   }
-  if (!seen.has('all_time') && presetMap.all_time) {
-    merged.unshift(presetMap.all_time)
+  // Append any new presets not present in legacy payload (e.g. last_week)
+  for (const [field, preset] of Object.entries(presetMap)) {
+    if (!seen.has(field)) {
+      merged.push(preset)
+      seen.add(field)
+    }
   }
   return merged
 }

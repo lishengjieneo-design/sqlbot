@@ -327,12 +327,13 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
 
     stmt = (select(ChatRecord.id, ChatRecord.chat_id, ChatRecord.create_time, ChatRecord.finish_time,
                    ChatRecord.question, ChatRecord.sql_answer, ChatRecord.sql,ChatRecord.datasource,
-                   ChatRecord.chart_answer, ChatRecord.chart, ChatRecord.analysis, ChatRecord.predict,
+                   ChatRecord.chart_answer, ChatRecord.chart, ChatRecord.analysis, ChatRecord.summary, ChatRecord.predict,
                    ChatRecord.datasource_select_answer, ChatRecord.analysis_record_id, ChatRecord.predict_record_id,
                    ChatRecord.regenerate_record_id,
                    ChatRecord.recommended_question, ChatRecord.first_chat,
                    ChatRecord.finish, ChatRecord.error,
                    ChatRecord.clarification, ChatRecord.clarification_resolved, ChatRecord.clarification_abandoned,
+                   ChatRecord.field_aliases,
                    sql_alias_log.reasoning_content.label('sql_reasoning_content'),
                    chart_alias_log.reasoning_content.label('chart_reasoning_content'),
                    analysis_alias_log.reasoning_content.label('analysis_reasoning_content'),
@@ -355,13 +356,13 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
     if with_data:
         stmt = select(ChatRecord.id, ChatRecord.chat_id, ChatRecord.create_time, ChatRecord.finish_time,
                       ChatRecord.question, ChatRecord.sql_answer, ChatRecord.sql,ChatRecord.datasource,
-                      ChatRecord.chart_answer, ChatRecord.chart, ChatRecord.analysis, ChatRecord.predict,
+                      ChatRecord.chart_answer, ChatRecord.chart, ChatRecord.analysis, ChatRecord.summary, ChatRecord.predict,
                       ChatRecord.datasource_select_answer, ChatRecord.analysis_record_id, ChatRecord.predict_record_id,
                       ChatRecord.regenerate_record_id,
                       ChatRecord.recommended_question, ChatRecord.first_chat,
                       ChatRecord.finish, ChatRecord.error, ChatRecord.data, ChatRecord.predict_data,
                       ChatRecord.clarification, ChatRecord.clarification_resolved,
-                      ChatRecord.clarification_abandoned).where(
+                      ChatRecord.clarification_abandoned, ChatRecord.field_aliases).where(
             and_(ChatRecord.create_by == current_user.id, ChatRecord.chat_id == chart_id)).order_by(
             ChatRecord.create_time)
 
@@ -424,7 +425,7 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
                                  total_tokens=total_tokens,
                                  question=row.question, sql_answer=row.sql_answer, sql=row.sql, datasource=row.datasource,
                                  chart_answer=row.chart_answer, chart=row.chart,
-                                 analysis=row.analysis, predict=row.predict,
+                                 analysis=row.analysis, summary=getattr(row, 'summary', None), predict=row.predict,
                                  datasource_select_answer=row.datasource_select_answer,
                                  analysis_record_id=row.analysis_record_id, predict_record_id=row.predict_record_id,
                                  regenerate_record_id=row.regenerate_record_id,
@@ -433,6 +434,7 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
                                  clarification=row.clarification,
                                  clarification_resolved=row.clarification_resolved,
                                  clarification_abandoned=row.clarification_abandoned,
+                                 field_aliases=getattr(row, 'field_aliases', None),
                                  sql_reasoning_content=row.sql_reasoning_content,
                                  chart_reasoning_content=row.chart_reasoning_content,
                                  analysis_reasoning_content=row.analysis_reasoning_content,
@@ -446,7 +448,7 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
                                  total_tokens=total_tokens,
                                  question=row.question, sql_answer=row.sql_answer, sql=row.sql, datasource=row.datasource,
                                  chart_answer=row.chart_answer, chart=row.chart,
-                                 analysis=row.analysis, predict=row.predict,
+                                 analysis=row.analysis, summary=getattr(row, 'summary', None), predict=row.predict,
                                  datasource_select_answer=row.datasource_select_answer,
                                  analysis_record_id=row.analysis_record_id, predict_record_id=row.predict_record_id,
                                  regenerate_record_id=row.regenerate_record_id,
@@ -454,7 +456,8 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
                                  finish=row.finish, error=row.error, data=row.data, predict_data=row.predict_data,
                                  clarification=row.clarification,
                                  clarification_resolved=row.clarification_resolved,
-                                 clarification_abandoned=row.clarification_abandoned))
+                                 clarification_abandoned=row.clarification_abandoned,
+                                 field_aliases=getattr(row, 'field_aliases', None)))
 
     result = list(map(format_record, record_list))
 
@@ -914,6 +917,30 @@ def save_analysis_answer(session: SessionDep, record_id: int, answer: str = '') 
     record = get_chat_record_by_id(session, record_id)
 
     return record
+
+
+def save_summary_answer(session: SessionDep, record_id: int, answer: str = '') -> ChatRecord:
+    if not record_id:
+        raise Exception("Record id cannot be None")
+
+    stmt = update(ChatRecord).where(and_(ChatRecord.id == record_id)).values(
+        summary=answer,
+    )
+    session.execute(stmt)
+    session.commit()
+    return get_chat_record_by_id(session, record_id)
+
+
+def save_field_aliases(session: SessionDep, record_id: int, aliases: list | None = None) -> ChatRecord:
+    if not record_id:
+        raise Exception("Record id cannot be None")
+
+    stmt = update(ChatRecord).where(and_(ChatRecord.id == record_id)).values(
+        field_aliases=aliases or [],
+    )
+    session.execute(stmt)
+    session.commit()
+    return get_chat_record_by_id(session, record_id)
 
 
 def save_predict_answer(session: SessionDep, record_id: int, answer: str) -> ChatRecord:

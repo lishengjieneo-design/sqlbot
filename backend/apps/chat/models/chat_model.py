@@ -13,6 +13,8 @@ from sqlmodel import SQLModel, Field
 from apps.db.constant import DB
 from apps.template.filter.generator import get_permissions_template
 from apps.template.generate_analysis.generator import get_analysis_template
+from apps.template.generate_summary.generator import get_summary_template
+from apps.template.generate_field_alias.generator import get_field_alias_template
 from apps.template.generate_chart.generator import get_chart_template
 from apps.template.generate_dynamic.generator import get_dynamic_template
 from apps.template.generate_guess_question.generator import get_guess_question_template
@@ -48,6 +50,8 @@ class OperationEnum(Enum):
     EXECUTE_SQL = '12'
     GENERATE_PICTURE = '13'
     FILTER_EXTRA_PROMPT = '14'
+    GENERATE_SUMMARY = '15'
+    GENERATE_FIELD_ALIASES = '16'
 
 
 class ChatFinishStep(Enum):
@@ -120,6 +124,7 @@ class ChatRecord(SQLModel, table=True):
     chart_answer: str = Field(sa_column=Column(Text, nullable=True))
     chart: str = Field(sa_column=Column(Text, nullable=True))
     analysis: str = Field(sa_column=Column(Text, nullable=True))
+    summary: str = Field(sa_column=Column(Text, nullable=True))
     predict: str = Field(sa_column=Column(Text, nullable=True))
     predict_data: str = Field(sa_column=Column(Text, nullable=True))
     recommended_question_answer: str = Field(sa_column=Column(Text, nullable=True))
@@ -133,6 +138,7 @@ class ChatRecord(SQLModel, table=True):
     clarification: Optional[dict] = Field(default=None, sa_column=Column(JSONB, nullable=True))
     clarification_resolved: bool = Field(sa_column=Column(Boolean, nullable=True, default=False))
     clarification_abandoned: bool = Field(sa_column=Column(Boolean, nullable=True, default=False))
+    field_aliases: Optional[list] = Field(default=None, sa_column=Column(JSONB, nullable=True))
 
 
 class ChatRecordResult(BaseModel):
@@ -150,6 +156,7 @@ class ChatRecordResult(BaseModel):
     chart_answer: Optional[str] = None
     chart: Optional[str] = None
     analysis: Optional[str] = None
+    summary: Optional[str] = None
     predict: Optional[str] = None
     predict_data: Optional[str] = None
     recommended_question: Optional[str] = None
@@ -162,6 +169,7 @@ class ChatRecordResult(BaseModel):
     clarification: Optional[dict] = None
     clarification_resolved: Optional[bool] = False
     clarification_abandoned: Optional[bool] = False
+    field_aliases: Optional[list] = None
     sql_reasoning_content: Optional[str] = None
     chart_reasoning_content: Optional[str] = None
     analysis_reasoning_content: Optional[str] = None
@@ -309,6 +317,30 @@ class AiModelQuestion(BaseModel):
 
     def analysis_user_question(self):
         return get_analysis_template()['user'].format(fields=self.fields, data=self.data)
+
+    def summary_sys_question(self):
+        return get_summary_template()['system'].format(
+            lang=self.lang,
+            terminologies=self.terminologies or '',
+        )
+
+    def summary_user_question(self):
+        return get_summary_template()['user'].format(
+            question=self.question or '',
+            fields=self.fields,
+            data=self.data,
+        )
+
+    def field_alias_sys_question(self):
+        return get_field_alias_template()['system'].format(
+            terminologies=self.terminologies or '',
+        )
+
+    def field_alias_user_question(self, fields: str = '[]'):
+        return get_field_alias_template()['user'].format(
+            question=self.question or '',
+            fields=fields,
+        )
 
     def predict_sys_question(self):
         return get_predict_template()['system'].format(lang=self.lang, custom_prompt=self.custom_prompt)

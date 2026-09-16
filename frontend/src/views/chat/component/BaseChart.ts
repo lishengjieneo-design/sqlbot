@@ -18,6 +18,8 @@ export abstract class BaseChart {
   axis: Array<ChartAxis> = []
   data: Array<ChartData> = []
   showLabel: boolean = false
+  /** BlueCard P3 line skin (gated; default off for dashboard/predict). */
+  bluecardSkin: boolean = false
 
   constructor(id: string, name: string) {
     this.id = id

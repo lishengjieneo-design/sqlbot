@@ -7,6 +7,34 @@ import {
   processMultiQuotaData,
 } from '@/views/chat/component/charts/utils.ts'
 
+const BLUECARD_BLUE = '#3b82f6'
+
+/** Adaptive decimals for chart point labels / tooltips. */
+export function formatChartNumber(value: unknown, isPercent = false): string {
+  if (value === undefined || value === null || value === '') return ''
+  const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''))
+  if (!Number.isFinite(n)) return String(value)
+  if (isPercent) {
+    return `${trimFixed(n, 2)}%`
+  }
+  const abs = Math.abs(n)
+  if (abs >= 1000) {
+    return Math.round(n).toLocaleString('en-US')
+  }
+  if (abs >= 1) {
+    return trimFixed(n, 2)
+  }
+  if (abs >= 0.01) {
+    return trimFixed(n, 4)
+  }
+  return trimFixed(n, 6)
+}
+
+function trimFixed(n: number, maxDp: number): string {
+  const fixed = n.toFixed(maxDp)
+  return fixed.replace(/\.?0+$/, '')
+}
+
 export class Line extends BaseG2Chart {
   constructor(id: string) {
     super(id, 'line')
@@ -40,10 +68,96 @@ export class Line extends BaseG2Chart {
     const x = axes.x
     const y = config.y
     const series = config.series
-
     const _data = checkIsPercent(y, config.data)
+    const isSingleSeries = series.length === 0
+    const useBlueSkin = this.bluecardSkin && isSingleSeries
+    const yKey = y[0].value
 
     console.debug({ 'render-info': { x: x, y: y, series: series, data: _data }, instance: this })
+
+    const gridStyle = this.bluecardSkin
+      ? {
+          lineDash: [4, 4],
+          stroke: '#e5e6eb',
+        }
+      : undefined
+
+    const children: any[] = []
+
+    if (useBlueSkin) {
+      children.push({
+        type: 'area',
+        encode: {
+          x: x[0].value,
+          y: yKey,
+          shape: 'smooth',
+        },
+        style: {
+          fill: `l(270) 0:#ffffff 1:${BLUECARD_BLUE}`,
+          fillOpacity: 0.18,
+        },
+        tooltip: false,
+      })
+    }
+
+    children.push({
+      type: 'line',
+      encode: {
+        shape: 'smooth',
+      },
+      // Color via style only — do NOT encode color to a constant hex (G2 shows it as legend).
+      style: useBlueSkin
+        ? {
+            stroke: BLUECARD_BLUE,
+            lineWidth: 2,
+          }
+        : undefined,
+      labels: this.showLabel
+        ? [
+            {
+              text: (row: any) => formatChartNumber(row[yKey], _data.isPercent),
+              style: {
+                dx: -10,
+                dy: -12,
+                fill: useBlueSkin ? BLUECARD_BLUE : undefined,
+                fontSize: 11,
+              },
+              transform: [
+                { type: 'contrastReverse' },
+                { type: 'exceedAdjust' },
+                { type: 'overlapHide' },
+              ],
+            },
+          ]
+        : [],
+      tooltip: (row: any) => {
+        const formatted = formatChartNumber(row[yKey], _data.isPercent)
+        if (series.length > 0) {
+          return {
+            name: row[series[0].value],
+            value: formatted,
+          }
+        }
+        return { name: y[0].name, value: formatted }
+      },
+    })
+
+    children.push({
+      type: 'point',
+      style: useBlueSkin
+        ? {
+            fill: BLUECARD_BLUE,
+            stroke: '#fff',
+            lineWidth: 1,
+          }
+        : {
+            fill: 'white',
+          },
+      encode: {
+        size: useBlueSkin ? 3.5 : 1.5,
+      },
+      tooltip: false,
+    })
 
     const options: G2Spec = {
       ...this.chart.options(),
@@ -51,26 +165,12 @@ export class Line extends BaseG2Chart {
       data: _data.data,
       encode: {
         x: x[0].value,
-        y: y[0].value,
+        y: yKey,
+        // Only bind color channel when there is a real series field
         color: series.length > 0 ? series[0].value : undefined,
       },
-      axis: {
-        x: {
-          title: false, // x[0].name,
-          labelFontSize: 12,
-          labelAutoHide: {
-            type: 'hide',
-            keepHeader: true,
-            keepTail: true,
-          },
-          labelAutoRotate: false,
-          labelAutoWrap: true,
-          labelAutoEllipsis: true,
-        },
-        y: {
-          title: false, // y[0].name,
-        },
-      },
+      // Hide bogus single-series color legend (was showing "#3b82f6")
+      legend: useBlueSkin || series.length === 0 ? false : undefined,
       scale: {
         x: {
           nice: true,
@@ -80,56 +180,38 @@ export class Line extends BaseG2Chart {
           type: 'linear',
         },
       },
-      children: [
-        {
-          type: 'line',
-          encode: {
-            shape: 'smooth',
+      axis: {
+        x: {
+          title: false,
+          labelFontSize: 12,
+          labelAutoHide: {
+            type: 'hide',
+            keepHeader: true,
+            keepTail: true,
           },
-          labels: this.showLabel
-            ? [
-                {
-                  text: (data: any) => {
-                    const value = data[y[0].value]
-                    if (value === undefined || value === null) {
-                      return ''
-                    }
-                    return `${value}${_data.isPercent ? '%' : ''}`
-                  },
-                  style: {
-                    dx: -10,
-                    dy: -12,
-                  },
-                  transform: [
-                    { type: 'contrastReverse' },
-                    { type: 'exceedAdjust' },
-                    { type: 'overlapHide' },
-                  ],
-                },
-              ]
-            : [],
-          tooltip: (data: any) => {
-            if (series.length > 0) {
-              return {
-                name: data[series[0].value],
-                value: `${data[y[0].value]}${_data.isPercent ? '%' : ''}`,
+          labelAutoRotate: false,
+          labelAutoWrap: true,
+          labelAutoEllipsis: true,
+          ...(gridStyle
+            ? {
+                grid: true,
+                gridStroke: gridStyle.stroke,
+                gridLineDash: gridStyle.lineDash,
               }
-            } else {
-              return { name: y[0].name, value: `${data[y[0].value]}${_data.isPercent ? '%' : ''}` }
-            }
-          },
+            : {}),
         },
-        {
-          type: 'point',
-          style: {
-            fill: 'white',
-          },
-          encode: {
-            size: 1.5,
-          },
-          tooltip: false,
+        y: {
+          title: false,
+          ...(gridStyle
+            ? {
+                grid: true,
+                gridStroke: gridStyle.stroke,
+                gridLineDash: gridStyle.lineDash,
+              }
+            : {}),
         },
-      ],
+      },
+      children,
     } as G2Spec
 
     this.chart.options(options)

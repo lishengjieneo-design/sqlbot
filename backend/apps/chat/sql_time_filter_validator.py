@@ -9,19 +9,28 @@ from sqlglot import exp
 
 from apps.chat.id_schema_prefilter import _SCHEMA_FIELD_RE
 
-_TIME_FIELD_SUFFIXES = ('_time', '_date', '_dt')
+_TIME_FIELD_SUFFIXES = ('_time', '_date', '_dt', '_month', '_year')
 _TIME_FIELD_EXACT = frozenset({
     'trade_date', 'biz_date', 'dt', 'date', 'created_at', 'updated_at',
     'open_time', 'close_time', 'settle_date', 'report_date',
+    'month', 'year', 'year_month', 'ym', 'stat_month', 'biz_month',
+    'report_month', 'data_month', 'period', 'period_month',
 })
 
 _DATE_LITERAL_RE = re.compile(
-    r"'\d{4}-\d{2}-\d{2}|'\d{4}/\d{2}/\d{2}|"
-    r'\d{4}-\d{2}-\d{2}|\d{4}/\d{2}/\d{2}',
+    r"'\d{4}-\d{2}-\d{2}'|"
+    r"'\d{4}/\d{2}/\d{2}'|"
+    r"'\d{4}-\d{2}'|"  # year-month partitions, e.g. '2026-01'
+    r"'\d{4}/\d{2}'|"
+    r'\d{4}-\d{2}-\d{2}|'
+    r'\d{4}/\d{2}/\d{2}|'
+    r'\d{4}-\d{2}(?!\d)|'
+    r'\d{4}/\d{2}(?!\d)',
 )
 _TIME_FUNC_RE = re.compile(
     r'\b(CURRENT_DATE|CURRENT_TIMESTAMP|NOW\s*\(|CURDATE\s*\(|SYSDATE|'
-    r'DATE_TRUNC|DATE_ADD|DATE_SUB|INTERVAL|TO_DATE|STR_TO_DATE)\b',
+    r'DATE_TRUNC|DATE_ADD|DATE_SUB|INTERVAL|TO_DATE|STR_TO_DATE|'
+    r'EXTRACT\s*\(|YEAR\s*\(|MONTH\s*\(|DATE_FORMAT)\b',
     re.I,
 )
 _WHERE_TIME_OP_RE = re.compile(

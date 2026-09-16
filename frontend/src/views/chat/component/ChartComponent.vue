@@ -15,6 +15,7 @@ const params = withDefaults(
     series?: Array<ChartAxis>
     multiQuotaName?: string | undefined
     showLabel?: boolean
+    bluecardSkin?: boolean
   }>(),
   {
     data: () => [],
@@ -24,6 +25,7 @@ const params = withDefaults(
     series: () => [],
     multiQuotaName: undefined,
     showLabel: false,
+    bluecardSkin: false,
   }
 )
 
@@ -67,13 +69,14 @@ function renderChart() {
   chartInstance = getChartInstance(params.type, chartId.value)
   if (chartInstance) {
     chartInstance.showLabel = params.showLabel
+    chartInstance.bluecardSkin = !!params.bluecardSkin
     chartInstance.init(axis.value, params.data)
     chartInstance.render()
   }
 }
 
 watch(
-  () => params.showLabel,
+  () => [params.showLabel, params.bluecardSkin, params.type],
   () => {
     renderChart()
   }

@@ -15,6 +15,7 @@ from apps.chat.time_range_prefilter import (
     build_time_range_clarification,
     build_time_resolution_label,
     format_time_range_display,
+    infer_time_range_from_question,
     question_has_time_constraint,
     validate_time_free_text,
     validate_time_selection,
@@ -27,6 +28,47 @@ def test_question_without_time():
 
 def test_question_with_relative_time():
     assert question_has_time_constraint('最近7天账户130032053入金') is True
+
+
+def test_question_with_this_year_variants():
+    assert question_has_time_constraint('本年度账户入金') is True
+    assert question_has_time_constraint('本年入金汇总') is True
+    assert question_has_time_constraint('今年净入金') is True
+    assert question_has_time_constraint('上年度出金') is True
+    assert question_has_time_constraint('账户入金') is False
+
+
+def test_infer_covers_new_presets_and_aliases():
+    """New clarification presets + common aliases must both skip clarif and infer dates."""
+    anchor = datetime(2026, 5, 19)
+    earliest = '2024-01-01'
+    cases = [
+        # new presets (exact labels)
+        ('上周入金', 'last_week', '2026-05-11', '2026-05-17'),
+        ('上月入金', 'last_month', '2026-04-01', '2026-04-30'),
+        ('本年入金', 'this_year', '2026-01-01', '2026-05-19'),
+        ('本年度入金', 'this_year', '2026-01-01', '2026-05-19'),
+        # aliases
+        ('上一周入金', 'last_week', '2026-05-11', '2026-05-17'),
+        ('上个月入金', 'last_month', '2026-04-01', '2026-04-30'),
+        ('上一月入金', 'last_month', '2026-04-01', '2026-04-30'),
+        ('今年入金', 'this_year', '2026-01-01', '2026-05-19'),
+        ('这个年度入金', 'this_year', '2026-01-01', '2026-05-19'),
+        # related recognized relatives
+        ('前天入金', 'day_before_yesterday', '2026-05-17', '2026-05-17'),
+        ('去年入金', 'last_year', '2025-01-01', '2025-12-31'),
+        ('上年度入金', 'last_year', '2025-01-01', '2025-12-31'),
+        ('前年入金', 'year_before_last', '2024-01-01', '2024-12-31'),
+        ('最近一个月入金', 'last_1_months', '2026-04-19', '2026-05-19'),
+        ('近3天入金', 'last_3_days', '2026-05-17', '2026-05-19'),
+    ]
+    for q, field, start, end in cases:
+        assert question_has_time_constraint(q) is True, q
+        inferred = infer_time_range_from_question(q, earliest, anchor)
+        assert inferred is not None, q
+        assert inferred['field'] == field, (q, inferred)
+        assert inferred['date_start'] == start, (q, inferred)
+        assert inferred['date_end'] == end, (q, inferred)
 
 
 def test_question_with_chinese_word_number_time():
@@ -65,13 +107,48 @@ def test_build_clarification_has_earliest_and_presets():
     assert payload['earliest_data_date'] == '2024-01-01'
     assert payload['factor_type'] == 'time_range'
     cands = payload['candidates']
-    assert len(cands) >= 7
-    assert cands[0]['field'] == 'all_time'
+    fields = [c['field'] for c in cands]
+    assert fields == [
+        'all_time',
+        'today',
+        'yesterday',
+        'this_week',
+        'last_week',
+        'this_month',
+        'last_month',
+        'this_year',
+        'last_7_days',
+        'last_30_days',
+    ]
     assert cands[0]['label'] == '全部'
     assert cands[0]['date_start'] == '2024-01-01'
     assert cands[0]['date_end'] == '2026-05-19'
     assert cands[1]['field'] == 'today'
     assert cands[1]['date_start'] == cands[1]['date_end']
+
+    by_field = {c['field']: c for c in cands}
+    assert by_field['last_week']['date_start'] == '2026-05-11'
+    assert by_field['last_week']['date_end'] == '2026-05-17'
+    assert by_field['last_month']['date_start'] == '2026-04-01'
+    assert by_field['last_month']['date_end'] == '2026-04-30'
+    assert by_field['this_year']['date_start'] == '2026-01-01'
+    assert by_field['this_year']['date_end'] == '2026-05-19'
+    assert by_field['last_week']['label'] == '上周'
+    assert by_field['last_month']['label'] == '上月'
+    assert by_field['this_year']['label'] == '本年'
+
+
+def test_merge_appends_new_presets():
+    legacy = [
+        {'field': 'today', 'label': '今天'},
+        {'field': 'last_7_days', 'label': '最近7天'},
+    ]
+    merged = merge_time_range_candidates(legacy, '2024-01-01', datetime(2026, 5, 19))
+    fields = {c['field'] for c in merged}
+    assert 'last_week' in fields
+    assert 'last_month' in fields
+    assert 'this_year' in fields
+    assert 'all_time' in fields
 
 
 def test_build_clarification_english_locale():
@@ -187,6 +264,18 @@ def test_sql_has_time_filter_with_between():
     sql = "SELECT * FROM t WHERE trade_date BETWEEN '2024-01-01' AND '2024-03-31'"
     ok, _ = sql_has_time_filter(sql, schema, {'label': '本月'})
     assert ok is True
+
+
+def test_sql_has_time_filter_year_month_partition():
+    """Partition column `month` with YYYY-MM literals must count as time filter."""
+    schema = '(month:varchar, 月份),(deposit_amt:decimal, 入金),(ib_email:varchar, 邮箱)'
+    sql = (
+        'SELECT SUM(deposit_amt) AS total '
+        "FROM t WHERE ib_email = 'a@b.com' "
+        "AND month >= '2026-01' AND month <= '2026-09'"
+    )
+    ok, reason = sql_has_time_filter(sql, schema, {'label': '本年'})
+    assert ok is True, reason
 
 
 def test_sql_missing_time_filter():

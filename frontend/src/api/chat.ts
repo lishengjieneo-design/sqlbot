@@ -48,6 +48,16 @@ export class ChatRecord {
   chart_answer?: string
   chart?: string
   analysis?: string
+  summary?: string
+  /** BlueCard P2 backend layout hint: empty|hero|metrics|profile|chart|table */
+  layout?: string
+  /** BlueCard field labels: [{field, name_zh, name_en, source}] */
+  field_aliases?: Array<{
+    field: string
+    name_zh?: string
+    name_en?: string
+    source?: string
+  }>
   analysis_thinking?: string
   predict?: string
   predict_content?: string

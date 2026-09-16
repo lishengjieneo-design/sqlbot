@@ -35,6 +35,14 @@ from apps.chat.id_schema_prefilter import (
     parse_id_fields_from_schema,
 )
 from apps.chat.balance_time_handler import MIXED_METRIC_KIND_HINT, classify_balance_time
+from apps.chat.bluecard.layout import build_table_chart_config, plan_bluecard_result
+from apps.chat.bluecard.field_aliases import (
+    aliases_list,
+    incomplete_fields,
+    merge_aliases,
+    parse_llm_alias_payload,
+    resolve_dict_aliases,
+)
 from apps.chat.metric_kind_resolver import (
     MetricKindContext,
     build_metric_kind_context,
@@ -44,12 +52,14 @@ from apps.chat.sql_time_filter_validator import sql_has_time_filter
 from apps.chat.time_config import get_query_earliest_date
 from apps.chat.time_range_prefilter import (
     build_time_range_clarification,
+    infer_time_range_from_question,
     question_has_explicit_time_constraint,
     question_has_time_constraint,
+    question_time_range_xml,
 )
 from apps.chat.curd.chat import save_question, save_sql_answer, save_sql, \
     save_error_message, save_sql_exec_data, save_chart_answer, save_chart, \
-    finish_record, save_analysis_answer, save_predict_answer, save_predict_data, \
+    finish_record, save_analysis_answer, save_summary_answer, save_field_aliases, save_predict_answer, save_predict_data, \
     save_select_datasource_answer, save_recommend_question_answer, \
     get_old_questions, save_analysis_predict_record, rename_chat, get_chart_config, \
     get_chat_chart_data, list_generate_sql_logs, list_generate_chart_logs, start_log, end_log, \
@@ -125,6 +135,7 @@ class LLMService:
     _metric_kind_context: Optional[MetricKindContext] = None
     _balance_time_llm_hint: Optional[str] = None
     _needs_mixed_metric_hint: bool = False
+    _inferred_time_range: Optional[dict] = None
 
     def __init__(self, session: Session, current_user: CurrentUser, chat_question: ChatQuestion,
                  current_assistant: Optional[CurrentAssistant] = None, no_reasoning: bool = False,
@@ -523,6 +534,148 @@ class LLMService:
         self.record = save_analysis_answer(session=_session, record_id=self.record.id,
                                            answer=orjson.dumps({'content': full_analysis_text}).decode())
 
+    def generate_summary(self, _session: Session, result: Optional[dict] = None):
+        """Short multi-row insight for BlueCard P1 (main stream, before chart)."""
+        payload = result or get_chat_chart_data(_session, self.record.id) or {}
+        fields = payload.get('fields') or []
+        rows = payload.get('data') or []
+        # Cap rows sent to the LLM for latency/cost.
+        capped = rows[:50]
+        self.chat_question.fields = orjson.dumps(fields).decode()
+        self.chat_question.data = orjson.dumps(capped).decode()
+
+        summary_msg: List[Union[BaseMessage, dict[str, Any]]] = [
+            SystemPromptMessage(content=self.chat_question.summary_sys_question()),
+            HumanMessage(content=self.chat_question.summary_user_question()),
+        ]
+
+        self.current_logs[OperationEnum.GENERATE_SUMMARY] = start_log(
+            session=_session,
+            ai_modal_id=self.chat_question.ai_modal_id,
+            ai_modal_name=self.chat_question.ai_modal_name,
+            operate=OperationEnum.GENERATE_SUMMARY,
+            record_id=self.record.id,
+            full_message=[
+                {
+                    'type': msg.type,
+                    'sqlbot_system': getattr(msg, 'sqlbot_system', False) is True,
+                    'content': msg.content,
+                }
+                for msg in summary_msg
+            ],
+        )
+
+        full_thinking_text = ''
+        full_summary_text = ''
+        token_usage = {}
+        res = process_stream(self.llm.stream(summary_msg), token_usage)
+        for chunk in res:
+            if chunk.get('content'):
+                full_summary_text += chunk.get('content')
+            if chunk.get('reasoning_content'):
+                full_thinking_text += chunk.get('reasoning_content')
+            yield chunk
+
+        summary_msg.append(AIMessage(full_summary_text))
+        self.current_logs[OperationEnum.GENERATE_SUMMARY] = end_log(
+            session=_session,
+            log=self.current_logs[OperationEnum.GENERATE_SUMMARY],
+            full_message=[
+                {
+                    'type': msg.type,
+                    'sqlbot_system': getattr(msg, 'sqlbot_system', False) is True,
+                    'content': msg.content,
+                }
+                for msg in summary_msg
+            ],
+            reasoning_content=full_thinking_text,
+            token_usage=token_usage,
+        )
+        self.record = save_summary_answer(
+            session=_session,
+            record_id=self.record.id,
+            answer=full_summary_text,
+        )
+
+    def generate_field_aliases(self, _session: Session, fields: Optional[list] = None) -> list:
+        """
+        BlueCard field labels: terminology/static dict first, LLM bilingual fallback.
+        Always returns a list of {field, name_zh, name_en, source}.
+        """
+        field_list = [f for f in (fields or []) if f]
+        if not field_list:
+            return []
+
+        from apps.chat.bluecard.field_aliases import alias_entry, humanize_en_field
+
+        oid = getattr(self.current_user, 'oid', None) or 1
+        ds_id = self.ds.id if isinstance(self.ds, CoreDatasource) else None
+        dict_aliases = resolve_dict_aliases(_session, field_list, oid=oid, datasource=ds_id)
+        missing = incomplete_fields(field_list, dict_aliases)
+
+        llm_aliases: dict = {}
+        if missing:
+            try:
+                fields_json = orjson.dumps(missing).decode()
+                alias_msg: List[Union[BaseMessage, dict[str, Any]]] = [
+                    SystemPromptMessage(content=self.chat_question.field_alias_sys_question()),
+                    HumanMessage(content=self.chat_question.field_alias_user_question(fields_json)),
+                ]
+                self.current_logs[OperationEnum.GENERATE_FIELD_ALIASES] = start_log(
+                    session=_session,
+                    ai_modal_id=self.chat_question.ai_modal_id,
+                    ai_modal_name=self.chat_question.ai_modal_name,
+                    operate=OperationEnum.GENERATE_FIELD_ALIASES,
+                    record_id=self.record.id,
+                    full_message=[
+                        {
+                            'type': msg.type,
+                            'sqlbot_system': getattr(msg, 'sqlbot_system', False) is True,
+                            'content': msg.content,
+                        }
+                        for msg in alias_msg
+                    ],
+                )
+                full_text = ''
+                token_usage = {}
+                res = process_stream(self.llm.stream(alias_msg), token_usage)
+                for chunk in res:
+                    if chunk.get('content'):
+                        full_text += chunk.get('content')
+                llm_aliases = parse_llm_alias_payload(full_text)
+                llm_aliases = {k: v for k, v in llm_aliases.items() if k in set(missing)}
+                alias_msg.append(AIMessage(full_text))
+                self.current_logs[OperationEnum.GENERATE_FIELD_ALIASES] = end_log(
+                    session=_session,
+                    log=self.current_logs[OperationEnum.GENERATE_FIELD_ALIASES],
+                    full_message=[
+                        {
+                            'type': msg.type,
+                            'sqlbot_system': getattr(msg, 'sqlbot_system', False) is True,
+                            'content': msg.content,
+                        }
+                        for msg in alias_msg
+                    ],
+                    token_usage=token_usage,
+                )
+            except Exception as err:
+                SQLBotLogUtil.warning(
+                    f'bluecard field_aliases llm failed record={self.record.id} err={err}'
+                )
+
+        merged = merge_aliases(dict_aliases, llm_aliases)
+        for f in field_list:
+            if f not in merged:
+                merged[f] = alias_entry(
+                    f,
+                    name_zh=humanize_en_field(f),
+                    name_en=humanize_en_field(f),
+                    source='fallback',
+                )
+        result = aliases_list(merged, field_list)
+        self.record = save_field_aliases(session=_session, record_id=self.record.id, aliases=result)
+        return result
+
     def generate_predict(self, _session: Session):
         fields = self.get_fields_from_chart(_session)
         self.chat_question.fields = orjson.dumps(fields).decode()
@@ -804,6 +957,29 @@ class LLMService:
             self.sql_message.append(HumanMessage(content=clarification_limit_xml(clarification)))
             self.sql_message.append(AIMessage(content='已达澄清上限，我将根据已确认信息生成 SQL，不再请求澄清。'))
 
+    def _append_inferred_question_time_to_sql_messages(self, earliest_date: Optional[str] = None):
+        """When question already states a relative range (e.g. 本年度), inject concrete dates."""
+        clarification = self.record.clarification if isinstance(self.record.clarification, dict) else {}
+        if get_time_range_resolved(clarification):
+            return
+        question = (self.chat_question.question or '').strip()
+        if not question:
+            return
+        ed = earliest_date or get_query_earliest_date(None)
+        inferred = infer_time_range_from_question(
+            question, ed, lang=self.chat_question.lang,
+        )
+        if not inferred:
+            return
+        self._inferred_time_range = inferred
+        self.sql_message.append(HumanMessage(content=question_time_range_xml(inferred)))
+        self.sql_message.append(AIMessage(content='我将按问题中的时间范围生成带时间过滤的 SQL。'))
+        SQLBotLogUtil.info(
+            f'inferred question time range record={self.record.id} '
+            f'field={inferred.get("field")} '
+            f'{inferred.get("date_start")}..{inferred.get("date_end")}'
+        )
+
     def _check_schema_id_prefilter(self) -> Optional[dict]:
         if not settings.CLARIFICATION_SCHEMA_PREFILTER_ENABLED:
             return None
@@ -937,6 +1113,7 @@ class LLMService:
             prefilter = self._check_schema_id_prefilter()
             if prefilter:
                 raise ClarificationRequiredError(prefilter)
+            self._append_inferred_question_time_to_sql_messages(earliest_date=earliest)
             self._append_metric_kind_hints_to_sql_messages()
         # append current question
         if not skip_prefilter:
@@ -1385,9 +1562,17 @@ class LLMService:
     def _regenerate_sql_for_time_filter(self, session: Session, reason: str, in_chat: bool):
         """Re-run LLM SQL generation after time-filter validation failed. Yields SSE chunks; returns full text."""
         earliest = get_query_earliest_date(session)
+        inferred = self._inferred_time_range or {}
+        bound_hint = ''
+        if inferred.get('date_start') and inferred.get('date_end'):
+            bound_hint = (
+                f'请严格使用开始日期 {inferred["date_start"]}、结束日期 {inferred["date_end"]}'
+                f'（{inferred.get("label") or inferred.get("field") or ""}）过滤。\n'
+            )
         self.sql_message.append(HumanMessage(
             content=(
                 f'<sql-time-filter-required>\n{reason}\n'
+                f'{bound_hint}'
                 f'数据最早可查日：{earliest}。必须在 SQL 的 WHERE 或子查询中加入时间字段过滤。\n'
                 f'</sql-time-filter-required>'
             )
@@ -1690,7 +1875,7 @@ class LLMService:
                     clarification = (
                         self.record.clarification if isinstance(self.record.clarification, dict) else {}
                     )
-                    time_resolved = get_time_range_resolved(clarification)
+                    time_resolved = get_time_range_resolved(clarification) or self._inferred_time_range
                     for attempt in range(settings.SQL_TIME_FILTER_MAX_RETRIES + 1):
                         ok, reason = sql_has_time_filter(sql, schema, time_resolved)
                         if ok:
@@ -1810,6 +1995,41 @@ class LLMService:
             if not stream:
                 json_result['data'] = get_chat_chart_data(_session, self.record.id)
 
+            # BlueCard: field display aliases (terminology dict > LLM zh/en)
+            fields_for_alias = result.get('fields') or []
+            if in_chat and fields_for_alias:
+                try:
+                    alias_list = self.generate_field_aliases(_session, fields_for_alias)
+                    yield 'data:' + orjson.dumps({
+                        'type': 'field-aliases',
+                        'content': alias_list,
+                    }).decode() + '\n\n'
+                except Exception as alias_err:
+                    SQLBotLogUtil.warning(
+                        f'bluecard field_aliases failed record={self.record.id} err={alias_err}'
+                    )
+
+            # BlueCard P1: multi-row summary SSE before chart generation
+            row_count = len(result.get('data') or [])
+            if in_chat and row_count > 1 and finish_step.value > ChatFinishStep.QUERY_DATA.value:
+                try:
+                    for chunk in self.generate_summary(_session, result):
+                        if in_chat:
+                            yield 'data:' + orjson.dumps({
+                                'content': chunk.get('content') or '',
+                                'reasoning_content': chunk.get('reasoning_content') or '',
+                                'type': 'summary-result',
+                            }).decode() + '\n\n'
+                    if self.record.summary:
+                        yield 'data:' + orjson.dumps({
+                            'content': self.record.summary,
+                            'type': 'summary',
+                        }).decode() + '\n\n'
+                except Exception as summary_err:
+                    SQLBotLogUtil.warning(
+                        f'bluecard summary failed record={self.record.id} err={summary_err}'
+                    )
+
             if finish_step.value <= ChatFinishStep.QUERY_DATA.value:
                 if stream:
                     if in_chat:
@@ -1835,7 +2055,66 @@ class LLMService:
                     yield json_result
                 return
 
-            # generate chart
+            # BlueCard P2: layout plan — skip chart LLM for cards / force table when unvisualizable
+            fields_list = result.get('fields') or []
+            rows_list = result.get('data') or []
+            plan = plan_bluecard_result(
+                fields_list,
+                rows_list,
+                preferred_chart_type=chart_type,
+                title=(self.chat_question.question or '')[:40],
+            )
+            SQLBotLogUtil.info(
+                f'bluecard plan record={self.record.id} layout={plan.layout} '
+                f'skip_chart={plan.skip_chart} force_table={plan.force_table} '
+                f'chart_type={plan.chart_type} rows={plan.row_count}'
+            )
+            if in_chat:
+                yield 'data:' + orjson.dumps({
+                    'type': 'layout',
+                    'layout': plan.layout,
+                    'skip_chart': plan.skip_chart,
+                    'force_table': plan.force_table,
+                }).decode() + '\n\n'
+
+            if plan.skip_chart:
+                if plan.force_table:
+                    chart = build_table_chart_config(
+                        fields_list,
+                        rows_list,
+                        title=(self.chat_question.question or '')[:40] or '查询结果',
+                    )
+                    save_chart(
+                        session=_session,
+                        chart=orjson.dumps(chart).decode(),
+                        record_id=self.record.id,
+                    )
+                    if not stream:
+                        json_result['chart'] = chart
+                    if in_chat:
+                        yield 'data:' + orjson.dumps({
+                            'content': orjson.dumps(chart).decode(),
+                            'type': 'chart',
+                        }).decode() + '\n\n'
+                # single-row / empty: no chart LLM; frontend bluecard uses sql-data only
+                if in_chat:
+                    yield 'data:' + orjson.dumps({'type': 'finish'}).decode() + '\n\n'
+                elif stream:
+                    _column_list = [AxisObj(name=f, value=f) for f in fields_list]
+                    md_data, _fields_list = DataFormat.convert_object_array_for_pandas(
+                        _column_list, rows_list,
+                    )
+                    if md_data and _fields_list:
+                        df = pd.DataFrame(md_data, columns=_fields_list)
+                        df_safe = DataFormat.safe_convert_to_string(df)
+                        yield df_safe.to_markdown(index=False) + '\n\n'
+                    else:
+                        yield 'The SQL execution result is empty.\n\n'
+                else:
+                    yield json_result
+                return
+
+            # generate chart (multi-row visualizable)
             used_tables_schema = self.out_ds_instance.get_db_schema(
                 self.ds.id, self.chat_question.question, embedding=False,
                 table_list=tables) if self.out_ds_instance else get_table_schema(
@@ -1845,7 +2124,7 @@ class LLMService:
                 question=self.chat_question.question,
                 embedding=False, table_list=tables)
             SQLBotLogUtil.info('used_tables_schema: \n' + used_tables_schema)
-            chart_res = self.generate_chart(_session, chart_type, used_tables_schema)
+            chart_res = self.generate_chart(_session, plan.chart_type or chart_type, used_tables_schema)
             full_chart_text = ''
             for chunk in chart_res:
                 full_chart_text += chunk.get('content')

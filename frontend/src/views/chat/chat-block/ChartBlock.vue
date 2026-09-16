@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { ChatMessage } from '@/api/chat.ts'
 import DisplayChartBlock from '@/views/chat/component/DisplayChartBlock.vue'
+import ResultCards from '@/views/chat/component/bluecard/ResultCards.vue'
+import SummaryCard from '@/views/chat/component/bluecard/SummaryCard.vue'
+import { resolveBluecardLayout, tryAggregateCardFallback, computePeriodChangeRate, formatChangeRate } from '@/views/chat/component/bluecard/resultLayout'
+import { resolveFieldDisplayName } from '@/views/chat/component/bluecard/fieldLabel'
+import { trackBluecard } from '@/views/chat/component/bluecard/track'
 import ChartPopover from '@/views/chat/chat-block/ChartPopover.vue'
 import { computed, ref, watch } from 'vue'
 import { useClipboard } from '@vueuse/core'
@@ -51,10 +56,13 @@ const props = withDefaults(
 
 const { copy } = useClipboard({ legacy: true })
 const loading = ref<boolean>(false)
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const addViewRef = ref(null)
 const emits = defineEmits(['exitFullScreen'])
 
+function fieldLabel(field: string): string {
+  return resolveFieldDisplayName(field, props.message?.record?.field_aliases, locale.value)
+}
 const dataObject = computed<{
   fields: Array<string>
   data: Array<{ [key: string]: any }>
@@ -116,12 +124,80 @@ const data = computed(() => {
 
 const chartRef = ref()
 
+/** 蓝卡出图 P0：按行数/字段形态分流；P1：先出数 + Summary */
+const bluecardLayout = computed(() =>
+  resolveBluecardLayout(dataObject.value.fields, data.value as Array<Record<string, unknown>>)
+)
+const isBluecardView = computed(() => {
+  if (props.loadingData) return false
+  if (!Array.isArray(data.value)) return false
+  return bluecardLayout.value !== 'chart'
+})
+const hasLoadedData = computed(
+  () => !props.loadingData && props.message?.record?.data != null && props.message?.record?.data !== ''
+)
+const originalQuestion = computed(() => props.message?.record?.question?.trim() || '')
+
+/** 问句未要求按月/趋势，但结果是时间序列多行 → 汇总成 KPI 卡兜底 */
+const aggregateCardFallback = computed(() => {
+  if (!hasLoadedData.value || props.isPredict) return null
+  return tryAggregateCardFallback(
+    dataObject.value.fields,
+    data.value as Array<Record<string, unknown>>,
+    originalQuestion.value
+  )
+})
+const showAggregateCard = computed(() => !!aggregateCardFallback.value)
+
+const showResultArea = computed(() => {
+  if (props.isPredict) {
+    return !!(props.message?.record?.chart && data.value.length > 0)
+  }
+  return !!(
+    props.message?.record?.sql ||
+    props.message?.record?.chart ||
+    hasLoadedData.value
+  )
+})
+const isMultiRow = computed(() => bluecardLayout.value === 'chart' && hasLoadedData.value)
+const summaryFallbackText = computed(() => {
+  if (!isMultiRow.value || props.message?.isTyping) return ''
+  if (props.message?.record?.summary) return ''
+  const n = Array.isArray(data.value) ? data.value.length : 0
+  if (n <= 0) return ''
+  return t('chat.bluecard.summary_fallback', [n])
+})
+const showSummary = computed(
+  () =>
+    isMultiRow.value &&
+    (!!props.message?.record?.summary ||
+      !!props.message?.isTyping ||
+      !!summaryFallbackText.value)
+)
+const summaryLoading = computed(
+  () => isMultiRow.value && !!props.message?.isTyping && !props.message?.record?.summary
+)
+
+const showProvisionalTable = computed(
+  () => isMultiRow.value && !props.message?.record?.chart && Array.isArray(data.value)
+)
+const provisionalFields = computed(() => dataObject.value.fields || [])
+const bluecardRow = computed(() => {
+  if (!data.value?.length) return {} as Record<string, unknown>
+  return data.value[0] as Record<string, unknown>
+})
+const aggregateCardFields = computed(() => aggregateCardFallback.value?.fields || [])
+const aggregateCardRow = computed(
+  () => aggregateCardFallback.value?.row || ({} as Record<string, unknown>)
+)
+const aggregateCardLayout = computed(() => aggregateCardFallback.value?.layout || 'metrics')
+
 const chartObject = computed<{
   type: ChartTypes
   title: string
   axis: {
     x: { name: string; value: string }
-    y: { name: string; value: string }
+    y: { name: string; value: string } | Array<{ name: string; value: string }>
     series: { name: string; value: string }
   }
   columns: Array<{ name: string; value: string }>
@@ -132,7 +208,47 @@ const chartObject = computed<{
   return {}
 })
 
-const originalQuestion = computed(() => props.message?.record?.question?.trim() || '')
+/** Primary y measure for period change (avoid re-showing totals when aggregate card exists). */
+const summaryMeasureField = computed(() => {
+  const y = chartObject.value?.axis?.y as any
+  if (y) {
+    const yObj = Array.isArray(y) ? y[0] : y
+    if (yObj?.value) return yObj.value as string
+  }
+  const fields = (dataObject.value.fields || []) as string[]
+  const rows = data.value as Array<Record<string, unknown>>
+  if (!rows?.length) return ''
+  return (
+    fields.find((f) => {
+      if (aggregateCardFallback.value?.timeField === f) return false
+      return rows.some((r) => {
+        const raw = r?.[f]
+        if (raw === null || raw === undefined || String(raw).trim() === '') return false
+        return !Number.isNaN(Number(String(raw).replace(/,/g, '')))
+      })
+    }) || ''
+  )
+})
+
+const summaryKeyMetric = computed(() => {
+  if (!isMultiRow.value || props.message?.isTyping) return null
+  const field = summaryMeasureField.value
+  const change = computePeriodChangeRate(data.value as Array<Record<string, unknown>>, field)
+  if (!change) return null
+  const label = resolveFieldDisplayName(
+    field,
+    props.message?.record?.field_aliases,
+    locale.value
+  )
+  return {
+    value: formatChangeRate(change.rate),
+    label: t('chat.bluecard.key_metric_change', [label]),
+  }
+})
+
+const chartCardTitle = computed(
+  () => chartObject.value?.title || originalQuestion.value || ''
+)
 
 const clarifiedRequirementLine = computed(() =>
   formatClarifiedRequirements(props.message?.record?.clarification)
@@ -161,6 +277,14 @@ const chartType = computed<ChartTypes>({
     currentChartType.value = v
   },
 })
+
+const useBluecardLineSkin = computed(
+  () =>
+    !props.isPredict &&
+    isMultiRow.value &&
+    chartType.value === 'line' &&
+    !!props.message?.record?.chart
+)
 
 const chartTypeList = computed(() => {
   const _list = []
@@ -233,6 +357,59 @@ function showSql() {
 }
 
 const showLabel = ref(false)
+const trackedRecordKeys = new Set<string>()
+
+watch(
+  useBluecardLineSkin,
+  (on) => {
+    if (on) showLabel.value = true
+  },
+  { immediate: true }
+)
+
+watch(
+  [
+    bluecardLayout,
+    showAggregateCard,
+    useBluecardLineSkin,
+    () => props.message?.record?.summary,
+    summaryFallbackText,
+    () => props.message?.record?.id,
+    () => props.message?.isTyping,
+  ],
+  () => {
+    if (props.isPredict || props.loadingData || props.message?.isTyping) return
+    if (!hasLoadedData.value) return
+    const rid = props.message?.record?.id
+    if (rid == null) return
+    const base = String(rid)
+    if (!trackedRecordKeys.has(`layout:${base}`)) {
+      trackedRecordKeys.add(`layout:${base}`)
+      trackBluecard('layout_show', {
+        layout: bluecardLayout.value,
+        recordId: rid,
+        aggregate: showAggregateCard.value,
+      })
+    }
+    if (showAggregateCard.value && !trackedRecordKeys.has(`agg:${base}`)) {
+      trackedRecordKeys.add(`agg:${base}`)
+      trackBluecard('aggregate_fallback', { recordId: rid })
+    }
+    if (isMultiRow.value) {
+      if (props.message?.record?.summary && !trackedRecordKeys.has(`sum_hit:${base}`)) {
+        trackedRecordKeys.add(`sum_hit:${base}`)
+        trackBluecard('summary_hit', { recordId: rid })
+      } else if (summaryFallbackText.value && !trackedRecordKeys.has(`sum_miss:${base}`)) {
+        trackedRecordKeys.add(`sum_miss:${base}`)
+        trackBluecard('summary_miss', { recordId: rid })
+      }
+    }
+    if (useBluecardLineSkin.value && !trackedRecordKeys.has(`line:${base}`)) {
+      trackedRecordKeys.add(`line:${base}`)
+      trackBluecard('line_skin', { recordId: rid })
+    }
+  }
+)
 
 function addToDashboard() {
   const recordeInfo = {
@@ -291,55 +468,56 @@ function copyText() {
 const exportRef = ref()
 
 function exportToExcel() {
-  if (chartRef.value && props.recordId) {
-    loading.value = true
-    chatApi
-      .export2Excel(props.recordId, props.message?.record?.chat_id || 0)
-      .then((res) => {
-        const blob = new Blob([res], {
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        })
-        const link = document.createElement('a')
-        link.href = URL.createObjectURL(blob)
-        link.download = `${chartObject.value.title ?? 'Excel'}.xlsx`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+  if (!props.recordId) return
+  loading.value = true
+  chatApi
+    .export2Excel(props.recordId, props.message?.record?.chat_id || 0)
+    .then((res) => {
+      const blob = new Blob([res], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       })
-      .catch(async (error) => {
-        if (error.response) {
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${chartObject.value.title ?? 'Excel'}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    })
+    .catch(async (error) => {
+      if (error.response) {
+        try {
+          let text = await error.response.data.text()
           try {
-            let text = await error.response.data.text()
-            try {
-              text = JSON.parse(text)
-            } finally {
-              ElMessage({
-                message: text,
-                type: 'error',
-                showClose: true,
-              })
-            }
-          } catch (e) {
-            console.error('Error processing error response:', e)
+            text = JSON.parse(text)
+          } finally {
+            ElMessage({
+              message: text,
+              type: 'error',
+              showClose: true,
+            })
           }
-        } else {
-          console.error('Other error:', error)
-          ElMessage({
-            message: error,
-            type: 'error',
-            showClose: true,
-          })
+        } catch (e) {
+          console.error('Error processing error response:', e)
         }
-      })
-      .finally(() => {
-        loading.value = false
-      })
-    exportRef.value?.hide()
-  }
+      } else {
+        console.error('Other error:', error)
+        ElMessage({
+          message: error,
+          type: 'error',
+          showClose: true,
+        })
+      }
+    })
+    .finally(() => {
+      loading.value = false
+    })
+  exportRef.value?.hide()
 }
 
 function exportToImage() {
-  const obj = document.getElementById('chart-component-' + chartId.value)
+  const obj =
+    document.getElementById('chart-component-' + chartId.value) ||
+    document.getElementById('bluecard-component-' + chartId.value)
   if (obj) {
     html2canvas(obj).then((canvas) => {
       canvas.toBlob(function (blob) {
@@ -374,11 +552,7 @@ watch(
 
 <template>
   <div
-    v-if="
-      !message.isTyping &&
-      ((!isPredict && (message?.record?.sql || message?.record?.chart)) ||
-        (isPredict && message?.record?.chart && data.length > 0))
-    "
+    v-if="showResultArea"
     v-loading.fullscreen.lock="loading"
     class="chart-component-container"
     :class="{ 'full-screen': enlarge }"
@@ -398,7 +572,7 @@ watch(
         </div>
       </div>
       <div class="buttons-bar">
-        <div class="chart-select-container">
+        <div v-if="!isBluecardView" class="chart-select-container">
           <el-tooltip effect="dark" :offset="8" :content="t('chat.type')" placement="top">
             <ChartPopover
               v-if="chartTypeList.length > 0"
@@ -428,7 +602,7 @@ watch(
           </el-tooltip>
         </div>
 
-        <div v-if="currentChartType !== 'table'" class="chart-select-container">
+        <div v-if="!isBluecardView && currentChartType !== 'table'" class="chart-select-container">
           <el-tooltip
             effect="dark"
             :offset="8"
@@ -457,7 +631,7 @@ watch(
             </el-button>
           </el-tooltip>
         </div>
-        <div v-if="message?.record?.chart">
+        <div v-if="message?.record?.chart || isBluecardView">
           <el-popover
             ref="exportRef"
             trigger="click"
@@ -490,7 +664,7 @@ watch(
                   <div class="model-name">{{ t('chat.excel') }}</div>
                 </div>
                 <div
-                  v-if="currentChartType !== 'table'"
+                  v-if="isBluecardView || currentChartType !== 'table'"
                   class="popover-item"
                   @click="exportToImage"
                 >
@@ -544,8 +718,38 @@ watch(
       </div>
     </div>
 
-    <template v-if="message?.record?.chart">
-      <div class="chart-block">
+    <template v-if="message?.record?.chart || (Array.isArray(data) && !loadingData)">
+      <SummaryCard
+        v-if="showSummary"
+        :summary="message?.record?.summary"
+        :loading="summaryLoading"
+        :fallback-text="summaryFallbackText"
+        :key-metric-value="summaryKeyMetric?.value"
+        :key-metric-label="summaryKeyMetric?.label"
+      />
+      <!-- 问句未要求按月时：先汇总 KPI 卡，下方仍可出趋势图 -->
+      <div v-if="showAggregateCard" class="bluecard-block bluecard-aggregate">
+        <div class="bluecard-aggregate-hint">{{ t('chat.bluecard.aggregate_hint') }}</div>
+        <ResultCards
+          :id="chartId + '-agg'"
+          :layout="aggregateCardLayout"
+          :fields="aggregateCardFields"
+          :row="aggregateCardRow"
+          :title="originalQuestion"
+          :field-aliases="message?.record?.field_aliases"
+        />
+      </div>
+      <div v-if="isBluecardView" class="bluecard-block">
+        <ResultCards
+          :id="chartId"
+          :layout="bluecardLayout === 'chart' ? 'empty' : bluecardLayout"
+          :fields="dataObject.fields || []"
+          :row="bluecardRow"
+          :title="originalQuestion || chartObject.title"
+          :field-aliases="message?.record?.field_aliases"
+        />
+      </div>
+      <div v-else-if="message?.record?.chart" class="chart-block" :class="{ 'chart-block--bluecard': useBluecardLineSkin }">
         <DisplayChartBlock
           :id="chartId"
           ref="chartRef"
@@ -554,7 +758,21 @@ watch(
           :data="data"
           :loading-data="loadingData"
           :show-label="showLabel"
+          :bluecard-skin="useBluecardLineSkin"
+          :card-title="chartCardTitle"
         />
+      </div>
+      <div v-else-if="showProvisionalTable" class="bluecard-provisional-table">
+        <el-table :data="data" stripe size="small" max-height="360" style="width: 100%">
+          <el-table-column
+            v-for="field in provisionalFields"
+            :key="field"
+            :prop="field"
+            :label="fieldLabel(field)"
+            min-width="120"
+            show-overflow-tooltip
+          />
+        </el-table>
       </div>
       <div v-if="dataObject.limit" class="over-limit-hint">
         {{ t('chat.data_over_limit', [dataObject.limit]) }}
@@ -717,6 +935,12 @@ watch(
       padding: 16px;
       height: calc(100% - 56px);
     }
+    .bluecard-block {
+      margin: unset;
+      padding: 16px;
+      height: calc(100% - 56px);
+      overflow: auto;
+    }
   }
 
   .header-bar {
@@ -865,6 +1089,33 @@ watch(
     width: 100%;
 
     margin-top: 16px;
+    &--bluecard {
+      height: 400px;
+    }
+  }
+
+  .bluecard-block {
+    width: 100%;
+    margin-top: 16px;
+    min-height: 120px;
+  }
+  .bluecard-aggregate {
+    margin-bottom: 4px;
+  }
+  .bluecard-aggregate-hint {
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 18px;
+    color: #646a73;
+  }
+  .bluecard-provisional-table {
+    width: 100%;
+    margin-top: 12px;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #e5e6eb;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(31, 35, 41, 0.06);
   }
   .over-limit-hint {
     min-height: 24px;

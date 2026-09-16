@@ -2,7 +2,12 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatRecord } from '@/api/chat'
-import { enrichTimeCandidates, formatPresetRange } from '@/utils/timeRangePresets'
+import {
+  enrichTimeCandidates,
+  formatPresetRange,
+  TIME_PRESET_CALENDAR_FIELDS,
+  TIME_PRESET_RANGE_FIELDS,
+} from '@/utils/timeRangePresets'
 
 export type TimeRangeSelection = {
   field: string
@@ -73,7 +78,10 @@ const TIME_PRESET_I18N_KEYS: Record<string, string> = {
   today: 'qa.clarification_time_preset_today',
   yesterday: 'qa.clarification_time_preset_yesterday',
   this_week: 'qa.clarification_time_preset_this_week',
+  last_week: 'qa.clarification_time_preset_last_week',
   this_month: 'qa.clarification_time_preset_this_month',
+  last_month: 'qa.clarification_time_preset_last_month',
+  this_year: 'qa.clarification_time_preset_this_year',
   last_7_days: 'qa.clarification_time_preset_last_7_days',
   last_30_days: 'qa.clarification_time_preset_last_30_days',
 }
@@ -97,16 +105,28 @@ type PresetRow = {
   rangeText: string
 }
 
-const presetRows = computed((): PresetRow[] =>
-  candidates.value
-    .map((item: TimeRangeSelection, index: number) => {
-      const title = presetTitle(item.field, item.label)
-      const rangeText = formatRange(item.date_start, item.date_end)
-      if (!title && !rangeText) return null
-      return { item, index, title, rangeText }
-    })
-    .filter((row: PresetRow | null): row is PresetRow => row != null)
-)
+const presetByField = computed(() => {
+  const map = new Map<string, PresetRow>()
+  candidates.value.forEach((item: TimeRangeSelection, index: number) => {
+    const field = item.field
+    if (!field) return
+    const title = presetTitle(field, item.label)
+    const rangeText = formatRange(item.date_start, item.date_end)
+    if (!title && !rangeText) return
+    map.set(field, { item, index, title, rangeText })
+  })
+  return map
+})
+
+function rowsForFields(fields: readonly string[]): PresetRow[] {
+  return fields
+    .map((f) => presetByField.value.get(f))
+    .filter((row): row is PresetRow => !!row)
+}
+
+const calendarPresetRows = computed(() => rowsForFields(TIME_PRESET_CALENDAR_FIELDS))
+const rangePresetRows = computed(() => rowsForFields(TIME_PRESET_RANGE_FIELDS))
+const presetRows = computed(() => [...calendarPresetRows.value, ...rangePresetRows.value])
 
 const customMode = ref<'single' | 'range'>('range')
 const customSingle = ref<string>('')
@@ -237,18 +257,38 @@ const visibleIdCandidates = computed(() =>
       {{ t('qa.clarification_earliest_data_hint', { date: earliestDate }) }}
     </p>
 
-    <!-- Time range presets -->
-    <div v-if="isTimeRange && presetRows.length" class="clarification-candidates time-presets">
-      <button
-        v-for="row in presetRows"
-        :key="row.item.field || row.index"
-        type="button"
-        class="time-preset-btn"
-        @click="onPresetClick(row)"
-      >
-        <span class="preset-title">{{ row.title }}</span>
-        <span class="preset-range">{{ row.rangeText }}</span>
-      </button>
+    <!-- Time range presets — Layout A: grouped rows -->
+    <div v-if="isTimeRange && presetRows.length" class="time-presets-grouped">
+      <div v-if="calendarPresetRows.length" class="time-preset-group">
+        <div class="time-preset-group-label">{{ t('qa.clarification_time_group_calendar') }}</div>
+        <div class="clarification-candidates time-presets">
+          <button
+            v-for="row in calendarPresetRows"
+            :key="row.item.field || row.index"
+            type="button"
+            class="time-preset-btn"
+            :title="row.rangeText || row.title"
+            @click="onPresetClick(row)"
+          >
+            <span class="preset-title">{{ row.title }}</span>
+          </button>
+        </div>
+      </div>
+      <div v-if="rangePresetRows.length" class="time-preset-group">
+        <div class="time-preset-group-label">{{ t('qa.clarification_time_group_range') }}</div>
+        <div class="clarification-candidates time-presets">
+          <button
+            v-for="row in rangePresetRows"
+            :key="row.item.field || row.index"
+            type="button"
+            class="time-preset-btn"
+            :title="row.rangeText || row.title"
+            @click="onPresetClick(row)"
+          >
+            <span class="preset-title">{{ row.title }}</span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Custom date range -->
@@ -427,6 +467,20 @@ const visibleIdCandidates = computed(() =>
   line-height: 18px;
 }
 
+.time-presets-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.time-preset-group-label {
+  font-size: 12px;
+  line-height: 18px;
+  color: @text-secondary;
+  margin-bottom: 6px;
+}
+
 .clarification-candidates {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -435,44 +489,48 @@ const visibleIdCandidates = computed(() =>
 }
 
 .time-presets {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 0;
+  grid-template-columns: unset;
 }
 
 .time-preset-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  width: 100%;
-  min-height: 52px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: auto;
+  min-width: 72px;
+  min-height: 32px;
   margin: 0;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 6px 12px;
+  border-radius: 16px;
   border: 1px solid @border-color;
   background: @surface-card;
   cursor: pointer;
-  text-align: left;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  text-align: center;
+  box-shadow: none;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 
   &:hover {
-    border-color: var(--ed-color-primary, rgba(28, 186, 144, 1));
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    border-color: var(--ed-color-primary, #3b82f6);
+    color: var(--ed-color-primary, #3b82f6);
+    box-shadow: none;
   }
 }
 
 .preset-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 20px;
-  color: @text-primary;
+  color: inherit;
 }
 
 .preset-range {
-  font-size: 12px;
-  line-height: 18px;
-  color: @text-secondary;
-  word-break: break-all;
+  display: none;
 }
 
 .custom-range-section {
