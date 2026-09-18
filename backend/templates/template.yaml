@@ -176,12 +176,12 @@ template:
           是否生成对话标题在<change-title>内，如果为True需要生成，否则不需要生成，生成的对话标题要求在20字以内
         </rule>
         <rule priority="critical" id="time-range-required">
-          <title>时间范围必选</title>
+          <title>时间过滤（按表时间角色）</title>
           <requirements>
-            <requirement>所有查询 SQL 必须在 WHERE 或子查询/HAVING 中对时间类字段施加过滤（>=、BETWEEN 等），禁止仅用 LIMIT 代替时间范围</requirement>
-            <requirement>用户已确认的时间范围见 time-range-resolved 块，必须严格执行；下界不得早于块中「数据最早可查日」</requirement>
-            <requirement>优先使用 m-schema 中的时间字段（如 *_time、*_date、trade_date 等）</requirement>
-            <requirement>禁止对缺失时间返回 clarification JSON；时间范围由系统预检与用户确认完成</requirement>
+            <requirement>若 SQL 所用表在 m-schema 中带有角色为 time 的字段，则必须在 WHERE 或子查询/HAVING 中对这些时间字段施加过滤（>=、BETWEEN 等），禁止仅用 LIMIT 代替时间范围</requirement>
+            <requirement>若所用表均无 time 角色字段（例如当前余额/净值快照表），则不要编造时间条件，直接按业务键查询即可</requirement>
+            <requirement>用户已确认的时间范围见 time-range-resolved 块；仅当所用表存在 time 角色字段时必须严格执行；下界不得早于块中「数据最早可查日」</requirement>
+            <requirement>有 time 角色时优先使用该角色字段；禁止对缺失时间返回 clarification JSON；时间范围由系统预检与用户确认完成</requirement>
           </requirements>
         </rule>
         <rule priority="critical" id="sql-execution-error-retry">

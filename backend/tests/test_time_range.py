@@ -9,7 +9,11 @@ from apps.chat.clarification_util import (
     merge_time_range_candidates,
     normalize_current,
 )
-from apps.chat.sql_time_filter_validator import parse_time_fields_from_schema, sql_has_time_filter
+from apps.chat.sql_time_filter_validator import (
+    extract_sql_table_names,
+    parse_time_fields_from_schema,
+    sql_has_time_filter,
+)
 from apps.chat.time_range_prefilter import (
     build_time_preset_candidates,
     build_time_range_clarification,
@@ -284,6 +288,57 @@ def test_sql_missing_time_filter():
     ok, reason = sql_has_time_filter(sql, schema, {'label': '本月'})
     assert ok is False
     assert reason
+
+
+def test_sql_no_time_role_fields_skips_filter():
+    """Used tables have no semantic_role=time → hard check passes without date filter."""
+    sql = 'SELECT equity_usd FROM mt_login_account_balance WHERE login = 383090'
+    ok, reason = sql_has_time_filter(
+        sql,
+        schema_text='',
+        resolved_time=None,
+        required_time_fields=[],
+        tables_matched=True,
+    )
+    assert ok is True, reason
+
+
+def test_sql_with_time_role_fields_requires_filter():
+    sql = 'SELECT deposit_amt FROM daily_metric WHERE login = 383090'
+    ok, reason = sql_has_time_filter(
+        sql,
+        schema_text='',
+        resolved_time={'label': '本月'},
+        required_time_fields=['transaction_date'],
+        tables_matched=True,
+    )
+    assert ok is False
+    assert 'transaction_date' in reason
+
+
+def test_sql_with_time_role_fields_and_filter_ok():
+    sql = (
+        "SELECT deposit_amt FROM daily_metric "
+        "WHERE login = 383090 AND transaction_date >= '2026-09-01'"
+    )
+    ok, reason = sql_has_time_filter(
+        sql,
+        schema_text='',
+        resolved_time={'label': '本月'},
+        required_time_fields=['transaction_date'],
+        tables_matched=True,
+    )
+    assert ok is True, reason
+
+
+def test_extract_sql_table_names():
+    sql = (
+        'SELECT t1.login FROM sqlbot.mt_login_account_balance t1 '
+        'JOIN daily_metric t2 ON t1.login = t2.login'
+    )
+    names = extract_sql_table_names(sql)
+    assert 'mt_login_account_balance' in names
+    assert 'daily_metric' in names
 
 
 def test_parse_time_fields():

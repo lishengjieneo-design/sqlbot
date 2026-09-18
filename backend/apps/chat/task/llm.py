@@ -46,9 +46,12 @@ from apps.chat.bluecard.field_aliases import (
 from apps.chat.metric_kind_resolver import (
     MetricKindContext,
     build_metric_kind_context,
-    should_skip_sql_time_filter,
 )
-from apps.chat.sql_time_filter_validator import sql_has_time_filter
+from apps.chat.sql_time_filter_validator import (
+    extract_sql_table_names,
+    resolve_time_role_fields_for_tables,
+    sql_has_time_filter,
+)
 from apps.chat.time_config import get_query_earliest_date
 from apps.chat.time_range_prefilter import (
     build_time_range_clarification,
@@ -1866,18 +1869,36 @@ class LLMService:
             sql_operate = resolved['sql_operate']
 
             if settings.SQL_TIME_FILTER_VALIDATION_ENABLED:
-                skip_time_filter = (
-                    settings.METRIC_KIND_TIME_RULES_ENABLED
-                    and should_skip_sql_time_filter(self._metric_kind_context)
+                schema = self._get_schema_text()
+                clarification = (
+                    self.record.clarification if isinstance(self.record.clarification, dict) else {}
                 )
-                if not skip_time_filter:
-                    schema = self._get_schema_text()
-                    clarification = (
-                        self.record.clarification if isinstance(self.record.clarification, dict) else {}
+                time_resolved = get_time_range_resolved(clarification) or self._inferred_time_range
+                used_tables: set[str] = set()
+                if tables:
+                    used_tables.update(str(t) for t in tables if t)
+                used_tables |= extract_sql_table_names(sql)
+                ds_id = self.ds.id if isinstance(self.ds, CoreDatasource) else None
+                tables_matched, role_time_fields = resolve_time_role_fields_for_tables(
+                    _session, ds_id, used_tables,
+                )
+                # Tables resolved and none have semantic_role=time → skip hard check.
+                # Otherwise validate (role fields when matched; schema name heuristic as fallback).
+                skip_time_filter = tables_matched and not role_time_fields
+                if skip_time_filter:
+                    SQLBotLogUtil.info(
+                        f'sql time filter skipped record={self.record.id} '
+                        f'reason=no_time_role_fields tables={sorted(used_tables)}'
                     )
-                    time_resolved = get_time_range_resolved(clarification) or self._inferred_time_range
+                if not skip_time_filter:
                     for attempt in range(settings.SQL_TIME_FILTER_MAX_RETRIES + 1):
-                        ok, reason = sql_has_time_filter(sql, schema, time_resolved)
+                        ok, reason = sql_has_time_filter(
+                            sql,
+                            schema,
+                            time_resolved,
+                            required_time_fields=role_time_fields if tables_matched else None,
+                            tables_matched=tables_matched,
+                        )
                         if ok:
                             break
                         if attempt >= settings.SQL_TIME_FILTER_MAX_RETRIES:
@@ -1908,6 +1929,15 @@ class LLMService:
                         tables = resolved['tables']
                         real_execute_sql = resolved['real_execute_sql']
                         sql_operate = resolved['sql_operate']
+                        used_tables = set()
+                        if tables:
+                            used_tables.update(str(t) for t in tables if t)
+                        used_tables |= extract_sql_table_names(sql)
+                        tables_matched, role_time_fields = resolve_time_role_fields_for_tables(
+                            _session, ds_id, used_tables,
+                        )
+                        if tables_matched and not role_time_fields:
+                            break
 
             if isinstance(self.record.clarification, dict) and self.record.clarification:
                 done_state = {**self.record.clarification, 'current': None}
